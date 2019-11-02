@@ -13,11 +13,9 @@ import numpy as np
 from es_pandas import to_pandas, to_es
 
 
-
 # Information of es cluseter
 es_host = 'localhost:9200'
 index = 'demo'
-
 
 # Example data frame
 df = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 128)], 
