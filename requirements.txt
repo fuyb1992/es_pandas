@@ -1,0 +1,3 @@
+pandas>=0.24
+elasticsearch>=6.0
+progressbar2
