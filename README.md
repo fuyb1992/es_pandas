@@ -13,7 +13,10 @@ pip install es_pandas
 ## Usage
 
 ```
+import time
+
 import pandas as pd
+
 from es_pandas import to_pandas, to_es
 
 
@@ -29,6 +32,7 @@ df = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 128)],
 # Example of write data to es, auto create and put template to es if template does not exits
 to_es(df, es_host, index)
 
+time.sleep(10)
 # Example of read data from es
 df = to_pandas(es_host, index)
 print(df.head())
