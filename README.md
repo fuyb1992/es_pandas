@@ -3,8 +3,7 @@
  
 
 ## Requirements
-This package should work on both python3(>=3.4). 
-ElasticSearch should be version 6.x or 7.x(>=6.8).
+This package should work on python3(>=3.4) and ElasticSearch should be version 6.x or 7.x(>=6.8).
 
 Installation
 The package is hosted on PyPi and can be installed with pip:
