@@ -14,7 +14,6 @@ pip install es_pandas
 
 ```
 import pandas as pd
-import numpy as np
 from es_pandas import to_pandas, to_es
 
 
