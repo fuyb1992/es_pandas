@@ -1,0 +1,9 @@
+
+*.xml
+build/lib/es_pandas/__init__.py
+build/lib/es_pandas/es_pandas.py
+*.whl
+*.gz
+*.txt
+es_pandas.egg-info/PKG-INFO
+*.pickle
