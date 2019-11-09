@@ -3,7 +3,7 @@ import time
 import math
 import progressbar
 if not progressbar.__version__.startswith('3.'):
-    raise Exception('Incorrect version of progerssbar package, please do pip install progressbar2'
+    raise Exception('Incorrect version of progerssbar package, please do pip install progressbar2')
 
 import numpy as np
 import pandas as pd
