@@ -30,7 +30,8 @@ def to_es(df, es_host, index, doc_type=None, delete=False, thread_count=2, chunk
     if not doc_type:
         doc_type = index + '_type'
     es = Elasticsearch(es_host)
-    init_es_tmpl(df, es, doc_type, delete=delete)
+    if es.info()['version']['number'].startswith('7.'):
+        init_es_tmpl(df, es, doc_type, delete=delete)
     gen = helpers.parallel_bulk(es, (rec_to_actions(df, index, doc_type=doc_type, chunk_size=chunk_size)), thread_count=thread_count,
                         chunk_size=chunk_size, raise_on_error=True, request_timeout=request_timeout)
 
