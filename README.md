@@ -39,6 +39,15 @@ time.sleep(10)
 # Example of read data from es
 df = to_pandas(es_host, index)
 print(df.head())
+
+df2 = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 129)],
+                    'Num': [x for x in range(32)],
+                    'Date': pd.date_range(start='2019/01/01', end='2019/02/01')})
+
+df2.loc[df2['Num']==10, ['Alpha']] = 'change'
+
+# Example of update data in es
+to_es_dev(df2, es_host, index, 'Num')
 ```
 
 ## License
