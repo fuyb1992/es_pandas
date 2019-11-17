@@ -49,6 +49,10 @@ df2.loc[df2['Num']==10, ['Alpha']] = 'change'
 # Example of update data in es
 to_es_dev(df2, es_host, index, 'Num')
 ```
+### More about update
+`to_es_dev(df, es_host, index, key_col, ignore_cols=[])` function is available if you want to write or update data with ElasticSearch.
+
+`to_es_dev` function writes `df` to es if `index` not exits, or it reads data from ElasticSearch in batches, and compare the data with `df` by merging them on `key_col`, if you want to ignore some columns when comparing, set it with `ignore_col` parameter. Moreover, new records in `df` will be written to ElasticSearch.
 
 ## License
 (c) 2019 Frank
