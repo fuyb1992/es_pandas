@@ -9,8 +9,12 @@ import numpy as np
 import pandas as pd
 
 
+from collections import defaultdict
 from elasticsearch import Elasticsearch, helpers
-from elasticsearch.client import IndicesClient
+from elasticsearch.client import IndicesClient, CatClient
+
+
+dtype_mapping = {'text': 'category', 'date': 'datetime64[ns]'}
 
 
 def to_es(df, es_host, index, doc_type=None, delete=False, thread_count=2, chunk_size=1000, request_timeout=60, success_threshold=0.9):
@@ -64,32 +68,31 @@ def to_pandas(es_host, index, query_rule={'query': {'match_all': {}}}, chunk_siz
     else:
         es = es_host
     scroll = '5m'
-    res = es.search(index=index, body=query_rule, rest_total_hits_as_int=True, size=1, request_timeout=timeout)
-    print('Got Hits:', res['hits']['total'])
-    if res['hits']['total'] > 0:
-        head = res['hits']['hits'][0]['_source'].keys()
-    else:
+
+    count = es.count(index=index, body=query_rule)['count']
+    if count < 0:
         raise Exception('Empty for %s' % index)
 
-    result = {}
-    li = []
+    ic = IndicesClient(es)
+    mapping = ic.get_mapping(index=index, include_type_name=False)
+    heads = [k for k in mapping[index]['mappings']['properties'].keys()]
+    dtypes = {k: v['type'] for k, v in mapping[index]['mappings']['properties'].items()}
+    dtypes = {k: dtype_mapping[v] for k, v in dtypes.items() if v in dtype_mapping}
+
+    if '_source' not in query_rule:
+        query_rule['_source'] = heads
+
+    df_li = defaultdict(list)
     anl = helpers.scan(es, query=query_rule, index=index, scroll=scroll, raise_on_error=True,
                        preserve_order=False, size=chunk_size, clear_scroll=True, request_timeout=timeout)
 
-    for _ in progressbar.progressbar(range(0, res['hits']['total'] // chunk_size)):
-        for _ in range(0, size):
-            mes = next(anl)
-            result[mes['_id']] = mes['_source'].values()
-
-        li.append(pd.DataFrame.from_dict(result, orient='index', columns=head))
-        result = {}
-
-    for _ in progressbar.progressbar(range(0, res['hits']['total'] % chunk_size)):
+    for _ in progressbar.progressbar(range(0, count)):
         mes = next(anl)
-        result[mes['_id']] = mes['_source'].values()
+        for head in heads:
+            df_li[head].append(mes['_source'][head])
+        df_li['_id'].append(mes['_id'])
 
-    li.append(pd.DataFrame.from_dict(result, orient='index', columns=head))
-    return pd.concat(li, axis=0, sort=False)
+    return pd.DataFrame(df_li).set_index('_id').astype(dtypes)
 
 
 def to_es_dev(df, es_host, index, key_col, ignore_cols=[], append=False, doc_type=None, delete=False, thread_count=2,
