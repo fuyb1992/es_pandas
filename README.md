@@ -27,21 +27,24 @@ from es_pandas import to_pandas, to_es
 es_host = 'localhost:9200'
 index = 'demo'
 
+# crete es_pandas instance
+ep = es_pandas(es_host)
+
 # Example data frame
 df = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 128)], 
                     'Num': [x for x in range(31)], 
                     'Date': pd.date_range(start='2019/01/01', end='2019/01/31')})
 
 # Example of write data to es, auto create and put template to es if template does not exits
-to_es(df, es_host, index)
+ep.to_es(df, index)
 
 time.sleep(10)
 # Example of read data from es
-df = to_pandas(es_host, index)
+df = ep.to_pandas(index)
 print(df.head())
 # only return particular fields in es
 heads = ['Num', 'Date']
-df = to_pandas(es_host, index, heads=heads)
+df = ep.to_pandas(index, heads=heads)
 print(df.head())
 
 df2 = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 129)],
@@ -51,7 +54,7 @@ df2 = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 129)],
 df2.loc[df2['Num']==10, ['Alpha']] = 'change'
 
 # Example of update data in es
-to_es_dev(df2, es_host, index, 'Num')
+ep.to_es_dev(df2, index, 'Num')
 ```
 ### More about update
 `to_es_dev(df, es_host, index, key_col, ignore_cols=[])` function is available if you want to write or update data with ElasticSearch.
