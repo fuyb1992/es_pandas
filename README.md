@@ -20,7 +20,7 @@ import time
 
 import pandas as pd
 
-from es_pandas import to_pandas, to_es
+from es_pandas import es_pandas
 
 
 # Information of es cluseter
