@@ -42,7 +42,7 @@ print(df.head())
 # only return particular fields in es
 heads = ['Num', 'Date']
 df = to_pandas(es_host, index, heads=heads)
-print(df.head()
+print(df.head())
 
 df2 = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 129)],
                     'Num': [x for x in range(32)],
