@@ -51,7 +51,7 @@ def to_es(df, es_host, index, doc_type=None, delete=False, thread_count=2, chunk
 
     return success_num
 
-def to_pandas(es_host, index, query_rule={'query': {'match_all': {}}}, chunk_size=10000, timeout=60):
+def to_pandas(es_host, index, query_rule={'query': {'match_all': {}}}, chunk_size=10000, timeout=60, heads=[]):
     """
     scroll datas from es, and convert to dataframe, the index of dataframe is from es index,
     about 2 million records/min
@@ -60,6 +60,7 @@ def to_pandas(es_host, index, query_rule={'query': {'match_all': {}}}, chunk_siz
         query_rule:
         index: full name of es indices
         chunk_size: maximum 10000
+        heads: certain columns get from es fields, [] for all fields
     Returns:
         DataFrame
     """
@@ -75,12 +76,16 @@ def to_pandas(es_host, index, query_rule={'query': {'match_all': {}}}, chunk_siz
 
     ic = IndicesClient(es)
     mapping = ic.get_mapping(index=index, include_type_name=False)
-    heads = [k for k in mapping[index]['mappings']['properties'].keys()]
-    dtypes = {k: v['type'] for k, v in mapping[index]['mappings']['properties'].items()}
-    dtypes = {k: dtype_mapping[v] for k, v in dtypes.items() if v in dtype_mapping}
+    if len(heads) < 1:
+        heads = [k for k in mapping[index]['mappings']['properties'].keys()]
+    else:
+        for head in heads:
+            if head not in mapping[index]['mappings']['properties'].keys():
+                raise Exception('%s column not found in %s index' % (head, index))
 
-    if '_source' not in query_rule:
-        query_rule['_source'] = heads
+    dtypes = {k: v['type'] for k, v in mapping[index]['mappings']['properties'].items() if k in heads}
+    dtypes = {k: dtype_mapping[v] for k, v in dtypes.items() if v in dtype_mapping}
+    query_rule['_source'] = heads
 
     df_li = defaultdict(list)
     anl = helpers.scan(es, query=query_rule, index=index, scroll=scroll, raise_on_error=True,
