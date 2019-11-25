@@ -2,30 +2,30 @@ import os
 import time
 import math
 import progressbar
+from typing import Iterable
+
 if not progressbar.__version__.startswith('3.'):
     raise Exception('Incorrect version of progerssbar package, please do pip install progressbar2')
 
 import numpy as np
 import pandas as pd
 
-
 from collections import defaultdict
 from elasticsearch import Elasticsearch, helpers
 from elasticsearch.client import IndicesClient, CatClient
 
 
-
-
-
 class es_pandas(object):
     '''Read, write and update large scale pandas DataFrame with Elasticsearch'''
+
     def __init__(self, *args, **kwargs):
         self.es = Elasticsearch(*args, **kwargs)
         self.ic = IndicesClient(self.es)
         self.dtype_mapping = {'text': 'category', 'date': 'datetime64[ns]'}
         self.id_col = '_id'
 
-    def to_es(self, df, index, doc_type=None, delete=False, thread_count=2, chunk_size=1000, request_timeout=60, success_threshold=0.9):
+    def to_es(self, df, index, doc_type=None, thread_count=2, chunk_size=1000, request_timeout=60,
+              success_threshold=0.9):
         '''
         :param df: pandas DataFrame data
         :param index: full name of es indices
@@ -37,12 +37,14 @@ class es_pandas(object):
         :param success_threshold:
         :return: num of the number of data written into es successfully
         '''
-        if not doc_type:
-            doc_type = index + '_type'
+
         if self.es.info()['version']['number'].startswith('7.'):
-            self.init_es_tmpl(df, doc_type, delete=delete)
-        gen = helpers.parallel_bulk(self.es, (self.rec_to_actions(df, index, doc_type=doc_type, chunk_size=chunk_size)), thread_count=thread_count,
-                            chunk_size=chunk_size, raise_on_error=True, request_timeout=request_timeout)
+            doc_type = '_doc'
+        elif not doc_type:
+            doc_type = index + '_type'
+        gen = helpers.parallel_bulk(self.es, (self.rec_to_actions(df, index, doc_type=doc_type, chunk_size=chunk_size)),
+                                    thread_count=thread_count,
+                                    chunk_size=chunk_size, raise_on_error=True, request_timeout=request_timeout)
 
         success_num = np.sum([res[0] for res in gen])
         rec_num = len(df)
@@ -53,7 +55,7 @@ class es_pandas(object):
 
         return success_num
 
-    def to_pandas(self, index, query_rule={'query': {'match_all': {}}}, heads=[]):
+    def to_pandas(self, index, query_rule={'query': {'match_all': {}}}, heads=None, dtype_mapping=None):
         """
         scroll datas from es, and convert to dataframe, the index of dataframe is from es index,
         about 2 million records/min
@@ -72,19 +74,30 @@ class es_pandas(object):
         if count < 0:
             raise Exception('Empty for %s' % index)
         mapping = self.ic.get_mapping(index=index, include_type_name=False)
-        if len(heads) < 1:
+        if heads:
             heads = [k for k in mapping[index]['mappings']['properties'].keys()]
         else:
-            for head in heads:
-                if head not in mapping[index]['mappings']['properties'].keys():
-                    raise Exception('%s column not found in %s index' % (head, index))
+            # for head in heads:
+            #     if head not in mapping[index]['mappings']['properties'].keys():
+            #         raise Exception('%s column not found in %s index' % (head, index))
+            unknown_heads = set(heads) - mapping[index]['mappings']['properties'].keys()
+            if unknown_heads:
+                raise Exception('%s column not found in %s index' % (','.join(unknown_heads), index))
 
-        dtypes = {k: v['type'] for k, v in mapping[index]['mappings']['properties'].items() if k in heads}
-        dtypes = {k: self.dtype_mapping[v] for k, v in dtypes.items() if v in self.dtype_mapping}
+        if dtype_mapping:
+            if isinstance(dtype_mapping, dict):
+                dtypes = {head: mapping[index]['mappings']['properties'][head]['type'] for head in
+                          (set(heads) - dtype_mapping.keys())}
+                dtypes.update(dtype_mapping)
+            elif ~isinstance(dtype_mapping, Iterable) and isinstance(dtype_mapping, type):
+                dtypes = {head: dtype_mapping for head in heads}
+            else:
+                raise TypeError('dtype_mapping only accept dict like or type')
+
         query_rule['_source'] = heads
-
         df_li = defaultdict(list)
-        anl = helpers.scan(self.es, query=query_rule, index=index, raise_on_error=True, preserve_order=False, clear_scroll=True)
+        anl = helpers.scan(self.es, query=query_rule, index=index, raise_on_error=True, preserve_order=False,
+                           clear_scroll=True)
 
         for _ in progressbar.progressbar(range(0, count)):
             mes = next(anl)
@@ -93,7 +106,6 @@ class es_pandas(object):
             df_li[self.id_col].append(mes['_id'])
 
         return pd.DataFrame(df_li).set_index(self.id_col).astype(dtypes)
-
 
     def to_es_dev(self, df, index, key_col, ignore_cols=[], append=False, doc_type=None, delete=False, thread_count=2,
                   chunk_size=1000, request_timeout=60, success_threshold=0.9):
@@ -114,11 +126,10 @@ class es_pandas(object):
 
         if not self.ic.exists(index):
             self.to_es(df, index, doc_type=doc_type, delete=delete, thread_count=thread_count,
-                  chunk_size=chunk_size, request_timeout=request_timeout, success_threshold=success_threshold)
+                       chunk_size=chunk_size, request_timeout=request_timeout, success_threshold=success_threshold)
         else:
             self.update_to_es(df, index, key_col, ignore_cols=ignore_cols, append=append, doc_type=doc_type,
-                         thread_count=thread_count, chunk_size=chunk_size,success_threshold=success_threshold)
-
+                              thread_count=thread_count, chunk_size=chunk_size, success_threshold=success_threshold)
 
     def rec_to_actions(self, df, index, doc_type, chunk_size=1000, update=False, _op_type=None):
         for i in progressbar.progressbar(range(math.ceil(len(df) / chunk_size))):
@@ -126,7 +137,8 @@ class es_pandas(object):
             end_index = min((i + 1) * chunk_size, len(df))
             if _op_type == 'update':
                 for id, record in zip(df.iloc[start_index: end_index, :].index.values,
-                                      df.iloc[start_index: end_index, :].to_json(orient='records', date_format='iso', lines=True).split('\n')):
+                                      df.iloc[start_index: end_index, :].to_json(orient='records', date_format='iso',
+                                                                                 lines=True).split('\n')):
                     action = {
                         '_op_type': _op_type,
                         '_index': index,
@@ -146,22 +158,28 @@ class es_pandas(object):
                     }
                     yield action
             else:
-                for record in df.iloc[start_index: end_index, :].to_json(orient='records', date_format='iso', lines=True).split('\n'):
+                for record in df.iloc[start_index: end_index, :].to_json(orient='records', date_format='iso',
+                                                                         lines=True).split('\n'):
                     action = {
                         '_index': index,
                         '_type': doc_type,
                         '_source': record}
                     yield action
 
-
-    def init_es_tmpl(self, df, doc_type, delete=False, shards_count=2, wait_time=5):
-        tmpl_exits = self.es.indices.exists_template(name=doc_type)
+    def init_es_tmpl(self, df, index, doc_type, delete=False, shards_count=2, wait_time=5):
+        tmpl_exits = self.es.indices.exists_template(name=index)
         if tmpl_exits and (not delete):
             return
-
         columns_body = {}
-        for key, data_type in df.dtypes.to_dict().items():
-            type_str = data_type.name
+
+        if isinstance(df, pd.DataFrame):
+            iter_dict = df.dtypes.to_dict()
+        elif isinstance(df, dict):
+            iter_dict = df
+        else:
+            raise Exception('init tmpl type is error, only accept DataFrame or dict of head with type mapping')
+        for key, data_type in iter_dict.items():
+            type_str = getattr(data_type, 'name', data_type)
             if 'int' in type_str:
                 columns_body[key] = {'type': 'long'}
             elif 'datetime' in type_str:
@@ -170,14 +188,11 @@ class es_pandas(object):
                 columns_body[key] = {'type': 'float'}
             else:
                 columns_body[key] = {'type': 'keyword', 'ignore_above': '256'}
-
+        es7_flag = self.es.info()['version']['number'].startswith('7.')
+        propertys = {'properties': columns_body} if es7_flag else {'_default_': {'properties': columns_body}}
         tmpl = {
-            'template': doc_type,
-            'mappings': {
-                '_default_': {
-                    'properties': columns_body
-                }
-            },
+            'template': '%s*' % (index if es7_flag else doc_type),
+            'mappings': propertys,
             'settings': {
                 'index': {
                     'refresh_interval': '5s',
@@ -193,15 +208,14 @@ class es_pandas(object):
         }
 
         if tmpl_exits and delete:
-            self.es.indices.delete_template(name=doc_type)
-            print('Delete and put template: %s' % doc_type)
-        self.es.indices.put_template(name=doc_type, body=tmpl)
-        print('New template %s added' % doc_type)
+            self.es.indices.delete_template(name=index)
+            print('Delete and put template: %s' % index)
+        self.es.indices.put_template(name=index, body=tmpl)
+        print('New template %s added' % index)
         time.sleep(wait_time)
 
-
     def update_to_es(self, df, index, key_col, ignore_cols=[], append=False, doc_type=None, thread_count=2,
-                  chunk_size=1000, success_threshold=0.9):
+                     chunk_size=1000, success_threshold=0.9):
         if not doc_type:
             doc_type = index + '_type'
         round = math.ceil(len(df) / chunk_size)
@@ -215,7 +229,7 @@ class es_pandas(object):
             new_df = df.iloc[i * chunk_size: min((i + 1) * chunk_size, len(df)), :]
             query_rule = {'query': {'terms': {key_col: new_df[key_col].values.tolist()}}}
             old_df = self.to_pandas(index, query_rule=query_rule, heads=columns)
-            change_df, _ , add_df = self.compare(old_df, new_df, key_col, ignore_cols=ignore_cols)
+            change_df, _, add_df = self.compare(old_df, new_df, key_col, ignore_cols=ignore_cols)
             change_num += len(change_df)
             add_num += len(add_df)
 
@@ -224,14 +238,14 @@ class es_pandas(object):
                 pass
             else:
                 change_gen = helpers.parallel_bulk(self.es,
-                                                   self.rec_to_actions(change_df, index, doc_type, chunk_size=chunk_size, _op_type='delete'),
+                                                   self.rec_to_actions(change_df, index, doc_type,
+                                                                       chunk_size=chunk_size, _op_type='delete'),
                                                    thread_count=thread_count, chunk_size=chunk_size)
                 add_df = pd.concat([change_df, add_df])
             add_gen = helpers.parallel_bulk(self.es,
                                             self.rec_to_actions(add_df, index, doc_type, chunk_size=chunk_size),
                                             thread_count=thread_count, chunk_size=chunk_size)
             num1, num2 = np.sum([res[0] for res in change_gen]), np.sum([res[0] for res in add_gen])
-
 
     def compare(self, old_df, new_df, key_col, ignore_cols=[]):
         """
