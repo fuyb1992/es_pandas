@@ -23,6 +23,7 @@ class es_pandas(object):
         self.ic = IndicesClient(self.es)
         self.dtype_mapping = {'text': 'category', 'date': 'datetime64[ns]'}
         self.id_col = '_id'
+        self.es7 = self.es.info()['version']['number'].startswith('7.')
 
     def to_es(self, df, index, doc_type=None, thread_count=2, chunk_size=1000, request_timeout=60,
               success_threshold=0.9):
@@ -38,7 +39,7 @@ class es_pandas(object):
         :return: num of the number of data written into es successfully
         '''
 
-        if self.es.info()['version']['number'].startswith('7.'):
+        if self.es7:
             doc_type = '_doc'
         elif not doc_type:
             doc_type = index + '_type'
@@ -188,10 +189,10 @@ class es_pandas(object):
                 columns_body[key] = {'type': 'float'}
             else:
                 columns_body[key] = {'type': 'keyword', 'ignore_above': '256'}
-        es7_flag = self.es.info()['version']['number'].startswith('7.')
-        propertys = {'properties': columns_body} if es7_flag else {'_default_': {'properties': columns_body}}
+        
+        propertys = {'properties': columns_body} if self.es7 else {'_default_': {'properties': columns_body}}
         tmpl = {
-            'template': '%s*' % (index if es7_flag else doc_type),
+            'template': '%s*' % (index if self.es7 else doc_type),
             'mappings': propertys,
             'settings': {
                 'index': {
