@@ -89,7 +89,7 @@ class es_pandas(object):
                 dtypes = {head: mapping[index]['mappings']['properties'][head]['type'] for head in
                           (set(heads) - dtype_mapping.keys())}
                 dtypes.update(dtype_mapping)
-            elif ~isinstance(dtype_mapping, Iterable) and isinstance(dtype_mapping, type):
+            elif not isinstance(dtype_mapping, Iterable):
                 dtypes = {head: dtype_mapping for head in heads}
             else:
                 raise TypeError('dtype_mapping only accept dict like or type')
