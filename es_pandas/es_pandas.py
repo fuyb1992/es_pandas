@@ -56,7 +56,7 @@ class es_pandas(object):
 
         return success_num
 
-    def to_pandas(self, index, query_rule={'query': {'match_all': {}}}, heads=None, dtype_mapping=None):
+    def to_pandas(self, index, query_rule={'query': {'match_all': {}}}, heads=[], dtype={}):
         """
         scroll datas from es, and convert to dataframe, the index of dataframe is from es index,
         about 2 million records/min
@@ -66,6 +66,7 @@ class es_pandas(object):
             index: full name of es indices
             chunk_size: maximum 10000
             heads: certain columns get from es fields, [] for all fields
+            dtype: dict like, pandas dtypes for certain columns
         Returns:
             DataFrame
         """
@@ -75,25 +76,19 @@ class es_pandas(object):
         if count < 0:
             raise Exception('Empty for %s' % index)
         mapping = self.ic.get_mapping(index=index, include_type_name=False)
-        if heads:
+        if len(heads) < 1:
             heads = [k for k in mapping[index]['mappings']['properties'].keys()]
         else:
-            # for head in heads:
-            #     if head not in mapping[index]['mappings']['properties'].keys():
-            #         raise Exception('%s column not found in %s index' % (head, index))
             unknown_heads = set(heads) - mapping[index]['mappings']['properties'].keys()
             if unknown_heads:
                 raise Exception('%s column not found in %s index' % (','.join(unknown_heads), index))
 
-        if dtype_mapping:
-            if isinstance(dtype_mapping, dict):
-                dtypes = {head: mapping[index]['mappings']['properties'][head]['type'] for head in
-                          (set(heads) - dtype_mapping.keys())}
-                dtypes.update(dtype_mapping)
-            elif not isinstance(dtype_mapping, Iterable):
-                dtypes = {head: dtype_mapping for head in heads}
-            else:
-                raise TypeError('dtype_mapping only accept dict like or type')
+        dtypes = {k: v['type'] for k, v in mapping[index]['mappings']['properties'].items() if k in heads}
+        dtypes = {k: self.dtype_mapping[v] for k, v in dtypes.items() if v in self.dtype_mapping}
+        if isinstance(dtype, dict):
+            dtypes.update(dtype)
+        else:
+            raise TypeError('dtype_mapping only accept dict')
 
         query_rule['_source'] = heads
         df_li = defaultdict(list)
@@ -167,8 +162,8 @@ class es_pandas(object):
                         '_source': record}
                     yield action
 
-    def init_es_tmpl(self, df, index, doc_type, delete=False, shards_count=2, wait_time=5):
-        tmpl_exits = self.es.indices.exists_template(name=index)
+    def init_es_tmpl(self, df, doc_type, delete=False, shards_count=2, wait_time=5):
+        tmpl_exits = self.es.indices.exists_template(name=doc_type)
         if tmpl_exits and (not delete):
             return
         columns_body = {}
@@ -192,7 +187,7 @@ class es_pandas(object):
         
         propertys = {'properties': columns_body} if self.es7 else {'_default_': {'properties': columns_body}}
         tmpl = {
-            'template': '%s*' % (index if self.es7 else doc_type),
+            'template': '%s*' % doc_type,
             'mappings': propertys,
             'settings': {
                 'index': {
@@ -209,10 +204,10 @@ class es_pandas(object):
         }
 
         if tmpl_exits and delete:
-            self.es.indices.delete_template(name=index)
-            print('Delete and put template: %s' % index)
-        self.es.indices.put_template(name=index, body=tmpl)
-        print('New template %s added' % index)
+            self.es.indices.delete_template(name=doc_type)
+            print('Delete and put template: %s' % doc_type)
+        self.es.indices.put_template(name=doc_type, body=tmpl)
+        print('New template %s added' % doc_type)
         time.sleep(wait_time)
 
     def update_to_es(self, df, index, key_col, ignore_cols=[], append=False, doc_type=None, thread_count=2,
