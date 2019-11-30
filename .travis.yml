@@ -21,3 +21,5 @@ before_script:
 
 script:
   - python test.py
+  - curl "localhost:9200/_cat/indices"
+  - curl "localhost:9200/demo/_search?pretty"
