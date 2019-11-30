@@ -44,11 +44,18 @@ ep.to_es(df, index)
 
 time.sleep(10)
 
-# get certain fields from es, set certain columns dtype
-heads = ['Num', 'Date', 'Alpha']
-dtype = {'Num': 'float', 'Alpha': object}
-df = ep.to_pandas(index, heads=heads, dtype=dtype)
+# Example of read data from es
+df = ep.to_pandas(index)
 print(df.head())
+
+# return certain fields in es
+heads = ['Num', 'Date']
+df = ep.to_pandas(index, heads=heads)
+print(df.head())
+
+# set certain columns dtype
+dtype = {'Num': 'float', 'Alpha': object}
+df = ep.to_pandas(index, dtype=dtype)
 print(df.dtypes)
 
 df2 = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 129)],

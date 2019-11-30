@@ -22,13 +22,13 @@ doc_type = 'demo'
 ep.init_es_tmpl(df, doc_type)
 
 # waiting for es template writing
-time.sleep(30)
+time.sleep(60)
 
 # Example of write data to es, auto create and put template to es if template does not exits
 ep.to_es(df, index)
 
 # waiting for es data writing
-time.sleep(30)
+time.sleep(60)
 # get certain fields from es, set certain columns dtype
 heads = ['Num', 'Date', 'Alpha']
 dtype = {'Num': 'float', 'Alpha': object}
