@@ -22,24 +22,19 @@ doc_type = 'demo'
 ep.init_es_tmpl(df, doc_type)
 
 # waiting for es template writing
-time.sleep(3)
+time.sleep(10)
 
 # Example of write data to es, auto create and put template to es if template does not exits
 ep.to_es(df, index)
 
 # waiting for es data writing
-time.sleep(3)
-
-# return certain fields in es
-heads = ['Num', 'Date']
-df = ep.to_pandas(index, heads=heads)
-
-# set certain columns dtype
+time.sleep(10)
+# get certain fields from es, set certain columns dtype
+heads = ['Num', 'Date', 'Alpha']
 dtype = {'Num': 'float', 'Alpha': object}
-df = ep.to_pandas(index, dtype=dtype)
-
-# Example of read data from es
-df = ep.to_pandas(index)
+df = ep.to_pandas(index, heads=heads, dtype=dtype)
+print(df.head())
+print(df.dtypes)
 
 df2 = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 129)],
                     'Num': [x for x in range(32)],
