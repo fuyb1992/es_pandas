@@ -75,7 +75,7 @@ class es_pandas(object):
         count = self.es.count(index=index, body=query_rule)['count']
         if count < 0:
             raise Exception('Empty for %s' % index)
-        mapping = self.ic.get_mapping(index=index, include_type_name=False)
+        mapping = self.ic.get_mapping(index=index) if self.es7 else self.ic.get_mapping(index=index, include_type_name=False)
         if len(heads) < 1:
             heads = [k for k in mapping[index]['mappings']['properties'].keys()]
         else:
