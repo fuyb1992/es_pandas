@@ -20,11 +20,15 @@ df = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 128)],
 # init template if you want
 doc_type = 'demo'
 ep.init_es_tmpl(df, doc_type)
+
+# waiting for es template writing
+time.sleep(3)
+
 # Example of write data to es, auto create and put template to es if template does not exits
 ep.to_es(df, index)
 
 # waiting for es data writing
-time.sleep(10)
+time.sleep(3)
 
 # return certain fields in es
 heads = ['Num', 'Date']
