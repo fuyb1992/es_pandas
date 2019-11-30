@@ -212,7 +212,9 @@ class es_pandas(object):
 
     def update_to_es(self, df, index, key_col, ignore_cols=[], append=False, doc_type=None, thread_count=2,
                      chunk_size=1000, success_threshold=0.9):
-        if not doc_type:
+        if self.es7:
+            doc_type = '_doc'
+        elif not doc_type:
             doc_type = index + '_type'
         round = math.ceil(len(df) / chunk_size)
         columns = df.columns.values.tolist()
