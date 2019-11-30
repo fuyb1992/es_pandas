@@ -9,7 +9,7 @@ services:
   - elasticsearch
 
 before_install:
-  - curl -O https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.0.1-amd64.deb && sudo dpkg -i --force-confnew elasticsearch-7.0.1.deb && sudo service elasticsearch restart
+  - curl -O https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.0.1-amd64.deb && sudo dpkg -i --force-confnew elasticsearch-7.0.1-amd64.deb && sudo service elasticsearch restart
 
 before_script:
   - sleep 10
