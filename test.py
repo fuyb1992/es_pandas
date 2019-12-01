@@ -24,8 +24,12 @@ ep.init_es_tmpl(df, doc_type)
 # waiting for es template writing
 time.sleep(5)
 
-# Example of write data to es, auto create and put template to es if template does not exits
-ep.to_es(df, index)
+# Example of write data to es,
+ep.to_es(df, index, doc_type=doc_type, use_index=True)
+
+# waiting for es data writing
+time.sleep(5)
+ep.delete_es(df.iloc[0:10, :], index, doc_type)
 
 # waiting for es data writing
 time.sleep(5)
@@ -44,4 +48,4 @@ df2 = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 129)],
 df2.loc[df2['Num']==10, ['Alpha']] = 'change'
 
 # Example of update data in es
-ep.to_es_dev(df2, index, 'Num')
+ep.to_es_dev(df2, index, 'Num', doc_type=doc_type)

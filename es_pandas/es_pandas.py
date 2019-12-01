@@ -25,12 +25,13 @@ class es_pandas(object):
         self.id_col = '_id'
         self.es7 = self.es.info()['version']['number'].startswith('7.')
 
-    def to_es(self, df, index, doc_type=None, thread_count=2, chunk_size=1000, request_timeout=60,
+    def to_es(self, df, index, doc_type=None, use_index=False, thread_count=2, chunk_size=1000, request_timeout=60,
               success_threshold=0.9):
         '''
         :param df: pandas DataFrame data
         :param index: full name of es indices
         :param doc_type: full name of es template
+        :param use_index: use DataFrame index as records' _id
         :param delete: delete existing doc_type template if True
         :param thread_count: number of thread sent data to es
         :param chunk_size: number of docs in one chunk sent to es
@@ -43,7 +44,7 @@ class es_pandas(object):
             doc_type = '_doc'
         elif not doc_type:
             doc_type = index + '_type'
-        gen = helpers.parallel_bulk(self.es, (self.rec_to_actions(df, index, doc_type=doc_type, chunk_size=chunk_size)),
+        gen = helpers.parallel_bulk(self.es, (self.rec_to_actions(df, index, doc_type=doc_type, use_index=use_index, chunk_size=chunk_size)),
                                     thread_count=thread_count,
                                     chunk_size=chunk_size, raise_on_error=True, request_timeout=request_timeout)
 
@@ -103,6 +104,39 @@ class es_pandas(object):
 
         return pd.DataFrame(df_li).set_index(self.id_col).astype(dtypes)
 
+    def delete_es(self, df, index, doc_type, key_col='', chunk_size=1000, thread_count=2):
+        '''
+
+        :param df: DataFrame you want to delete from elasticsearch
+        :param index: elasticsearch index
+        :param doc_type: elasticsearch doc type
+        :param key_col: default use DataFrame index
+        :param chunk_size:
+        :param thread_count:
+        :return: number of deleted records
+        '''
+        assert isinstance(key_col, str)
+        if len(key_col):
+            df = df.copy().set_index(key_col)
+        delete_gen = helpers.parallel_bulk(self.es,
+                                           self.rec_to_actions(df, index, doc_type, chunk_size=chunk_size, _op_type='delete'),
+                                           thread_count=thread_count, chunk_size=chunk_size)
+        return np.sum([res[0] for res in delete_gen])
+
+    def update_es(self, df, index, doc_type, key_col='', chunk_size=1000, thread_count=2):
+        '''
+
+        :param df: DataFrame you want to update in elasticsearch
+        :param index: elasticsearch index
+        :param doc_type: elasticsearch doc type
+        :param key_col: default use DataFrame index
+        :param chunk_size:
+        :param thread_count:
+        :return: number of update records
+        '''
+        assert isinstance(key_col, str)
+        raise Exception('to be continued')
+
     def to_es_dev(self, df, index, key_col, ignore_cols=[], append=False, doc_type=None, delete=False, thread_count=2,
                   chunk_size=1000, request_timeout=60, success_threshold=0.9):
         '''
@@ -127,22 +161,21 @@ class es_pandas(object):
             self.update_to_es(df, index, key_col, ignore_cols=ignore_cols, append=append, doc_type=doc_type,
                               thread_count=thread_count, chunk_size=chunk_size, success_threshold=success_threshold)
 
-    def rec_to_actions(self, df, index, doc_type, chunk_size=1000, update=False, _op_type=None):
+    def rec_to_actions(self, df, index, doc_type, use_index=False, chunk_size=1000, _op_type=None):
         for i in progressbar.progressbar(range(math.ceil(len(df) / chunk_size))):
             start_index = i * chunk_size
             end_index = min((i + 1) * chunk_size, len(df))
             if _op_type == 'update':
-                for id, record in zip(df.iloc[start_index: end_index, :].index.values,
-                                      df.iloc[start_index: end_index, :].to_json(orient='records', date_format='iso',
+                for id, record in zip(df.iloc[start_index: end_index].index.values,
+                                      df.iloc[start_index: end_index].to_json(orient='records', date_format='iso',
                                                                                  lines=True).split('\n')):
                     action = {
                         '_op_type': _op_type,
                         '_index': index,
                         '_type': doc_type,
-                        '_id': id,
+                        '_id': to_int(id),
                         'doc': record
                     }
-                    print(action)
                     yield action
             elif _op_type == 'delete':
                 for id in df.iloc[start_index: end_index, :].index.values:
@@ -150,17 +183,28 @@ class es_pandas(object):
                         '_op_type': _op_type,
                         '_index': index,
                         '_type': doc_type,
-                        '_id': id
+                        '_id': to_int(id)
                     }
                     yield action
             else:
-                for record in df.iloc[start_index: end_index, :].to_json(orient='records', date_format='iso',
-                                                                         lines=True).split('\n'):
-                    action = {
-                        '_index': index,
-                        '_type': doc_type,
-                        '_source': record}
-                    yield action
+                if use_index:
+                    for id, record in zip(df.iloc[start_index: end_index, :].index.values,
+                                          df.iloc[start_index: end_index, :].to_json(orient='records', date_format='iso',
+                                                                             lines=True).split('\n')):
+                        action = {
+                            '_index': index,
+                            '_type': doc_type,
+                            '_id': to_int(id),
+                            '_source': record}
+                        yield action
+                else:
+                    for record in df.iloc[start_index: end_index, :].to_json(orient='records', date_format='iso',
+                                                                             lines=True).split('\n'):
+                        action = {
+                            '_index': index,
+                            '_type': doc_type,
+                            '_source': record}
+                        yield action
 
     def init_es_tmpl(self, df, doc_type, delete=False, shards_count=2, wait_time=5):
         tmpl_exits = self.es.indices.exists_template(name=doc_type)
@@ -274,3 +318,8 @@ class es_pandas(object):
         merge = merge.set_index(self.id_col)
         index = merge['change'] > 0
         return merge[index][new_df.columns.values], merge[~index][new_df.columns.values], new_df
+
+
+def to_int(o):
+    if isinstance(o, np.integer): return int(o)
+    return o
