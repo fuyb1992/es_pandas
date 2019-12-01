@@ -39,7 +39,8 @@ class es_pandas(object):
         :param success_threshold:
         :return: num of the number of data written into es successfully
         '''
-
+        if self.es7:
+            doc_type = '_doc'
         if not doc_type:
             doc_type = index + '_type'
         gen = helpers.parallel_bulk(self.es, (self.rec_to_actions(df, index, doc_type=doc_type, use_index=use_index, chunk_size=chunk_size)),
@@ -102,12 +103,12 @@ class es_pandas(object):
 
         return pd.DataFrame(df_li).set_index(self.id_col).astype(dtypes)
 
-    def delete_es(self, df, index, doc_type, key_col='', chunk_size=1000, thread_count=2):
+    def delete_es(self, df, index, doc_type='_doc', key_col='', chunk_size=1000, thread_count=2):
         '''
 
         :param df: DataFrame you want to delete from elasticsearch
         :param index: elasticsearch index
-        :param doc_type: elasticsearch doc type
+        :param doc_type: elasticsearch doc type, _doc default for es 7
         :param key_col: default use DataFrame index
         :param chunk_size:
         :param thread_count:
@@ -204,7 +205,9 @@ class es_pandas(object):
                             '_source': record}
                         yield action
 
-    def init_es_tmpl(self, df, doc_type, delete=False, shards_count=2, wait_time=5):
+    def init_es_tmpl(self, df, index_patterns, doc_type, delete=False, shards_count=2, wait_time=5):
+        if self.es7:
+            return
         tmpl_exits = self.es.indices.exists_template(name=doc_type)
         if tmpl_exits and (not delete):
             return
@@ -226,25 +229,18 @@ class es_pandas(object):
                 columns_body[key] = {'type': 'float'}
             else:
                 columns_body[key] = {'type': 'keyword', 'ignore_above': '256'}
-        
-        propertys = {'properties': columns_body} if self.es7 else {'_default_': {'properties': columns_body}}
         tmpl = {
-            'template': '%s*' % doc_type,
-            'mappings': propertys,
+            'index_patterns': index_patterns,
             'settings': {
-                'index': {
-                    'refresh_interval': '5s',
-                    'number_of_shards': shards_count,
-                    'number_of_replicas': '1',
-                    'merge': {
-                        'scheduler': {
-                            'max_thread_count': '1'
-                        }
-                    }
-                }
+                'number_of_shards': shards_count
+            },
+            'mappings': {
+                '_doc': {
+                    '_source': {'enabled': True},
+                    'properties': columns_body,
+                },
             }
         }
-
         if tmpl_exits and delete:
             self.es.indices.delete_template(name=doc_type)
             print('Delete and put template: %s' % doc_type)
@@ -254,6 +250,8 @@ class es_pandas(object):
 
     def update_to_es(self, df, index, key_col, ignore_cols=[], append=False, doc_type=None, thread_count=2,
                      chunk_size=1000, success_threshold=0.9):
+        if self.es7:
+            doc_type = '_doc'
         if not doc_type:
             doc_type = index + '_type'
         round = math.ceil(len(df) / chunk_size)
