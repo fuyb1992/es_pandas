@@ -19,7 +19,7 @@ df = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 128)],
 
 # init template if you want
 doc_type = 'demo'
-ep.init_es_tmpl(df, ['demo*'], doc_type, delete=True)
+ep.init_es_tmpl(df, doc_type, delete=True)
 
 # Example of write data to es
 ep.to_es(df, index, doc_type=doc_type, use_index=True)

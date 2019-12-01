@@ -205,7 +205,7 @@ class es_pandas(object):
                             '_source': record}
                         yield action
 
-    def init_es_tmpl(self, df, index_patterns, doc_type, delete=False, shards_count=2, wait_time=5):
+    def init_es_tmpl(self, df, doc_type, delete=False, shards_count=2, wait_time=5):
         if self.es7:
             return
         tmpl_exits = self.es.indices.exists_template(name=doc_type)
@@ -229,16 +229,23 @@ class es_pandas(object):
                 columns_body[key] = {'type': 'float'}
             else:
                 columns_body[key] = {'type': 'keyword', 'ignore_above': '256'}
+
         tmpl = {
-            'index_patterns': index_patterns,
+            'template': '%s*' % doc_type,
+            'mappings': {'_default_':
+                             {'properties': columns_body}
+                         },
             'settings': {
-                'number_of_shards': shards_count
-            },
-            'mappings': {
-                '_doc': {
-                    '_source': {'enabled': True},
-                    'properties': columns_body,
-                },
+                'index': {
+                    'refresh_interval': '5s',
+                    'number_of_shards': shards_count,
+                    'number_of_replicas': '1',
+                    'merge': {
+                        'scheduler': {
+                            'max_thread_count': '1'
+                        }
+                    }
+                }
             }
         }
         if tmpl_exits and delete:
