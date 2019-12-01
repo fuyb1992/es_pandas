@@ -47,21 +47,21 @@ ep.to_es(df, index, doc_type=doc_type, use_index=True)
 time.sleep(10)
 
 # Example of read data from es
-df = ep.to_pandas(index, doc_type=doc_type)
+df = ep.to_pandas(index)
 print(df.head())
 
 # return certain fields in es
 heads = ['Num', 'Date']
-df = ep.to_pandas(index, heads=heads, doc_type=doc_type)
+df = ep.to_pandas(index, heads=heads)
 print(df.head())
 
 # set certain columns dtype
 dtype = {'Num': 'float', 'Alpha': object}
-df = ep.to_pandas(index, dtype=dtype, doc_type=doc_type)
+df = ep.to_pandas(index, dtype=dtype)
 print(df.dtypes)
 
 # delete records from es
-ep.delete_es(df.iloc[0:10, :], index, doc_type)
+ep.delete_es(df.iloc[0:10, :], index)
 
 
 df2 = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 129)],
