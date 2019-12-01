@@ -41,7 +41,7 @@ class es_pandas(object):
         '''
 
         if self.es7:
-            doc_type = '_doc'
+            doc_type = index + '_doc'
         elif not doc_type:
             doc_type = index + '_type'
         gen = helpers.parallel_bulk(self.es, (self.rec_to_actions(df, index, doc_type=doc_type, use_index=use_index, chunk_size=chunk_size)),
@@ -257,7 +257,7 @@ class es_pandas(object):
     def update_to_es(self, df, index, key_col, ignore_cols=[], append=False, doc_type=None, thread_count=2,
                      chunk_size=1000, success_threshold=0.9):
         if self.es7:
-            doc_type = '_doc'
+            doc_type = index + '_doc'
         elif not doc_type:
             doc_type = index + '_type'
         round = math.ceil(len(df) / chunk_size)
