@@ -107,7 +107,7 @@ class es_pandas(object):
         for _ in progressbar.progressbar(range(0, count)):
             mes = next(anl)
             for head in heads:
-                df_li[head].append(mes['_source'][head])
+                df_li[head].append(mes['_source'][head] if head in mes['_source'] else np.nan)
             df_li[self.id_col].append(mes['_id'])
 
         return pd.DataFrame(df_li).set_index(self.id_col).astype(dtypes)
