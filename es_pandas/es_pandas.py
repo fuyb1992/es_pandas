@@ -75,7 +75,16 @@ class es_pandas(object):
         count = self.es.count(index=index, body=query_rule)['count']
         if count < 0:
             raise Exception('Empty for %s' % index)
-        mapping = self.ic.get_mapping(index=index, include_type_name=False)
+        if self.es7:
+            mapping = self.ic.get_mapping(index=index, include_type_name=False)
+        else:
+            # Fix es client unrecongnized parameter 'include_type_name' bug for es 6.x
+            mapping = self.ic.get_mapping(index=index)
+            keys = list(mapping[index]['mappings'].keys())
+            if len(keys) > 2: raise Exception('Multi templates exits: %s' % (','.join(keys)))
+            tmp = mapping[index]['mappings'][keys[1]]['properties']
+            del mapping[index]['mappings'][keys[1]]
+            mapping[index]['mappings']['properties'] = tmp
         if len(heads) < 1:
             heads = [k for k in mapping[index]['mappings']['properties'].keys()]
         else:
