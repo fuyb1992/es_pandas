@@ -81,7 +81,7 @@ class es_pandas(object):
             # Fix es client unrecongnized parameter 'include_type_name' bug for es 6.x
             mapping = self.ic.get_mapping(index=index)
             key = [k for k in mapping[index]['mappings'].keys() if k != '_default_']
-            if len(keys) > 1: raise Exception('No templates exits: %s' % index)
+            if len(keys) < 1: raise Exception('No templates exits: %s' % index)
             mapping[index]['mappings']['properties'] = mapping[index]['mappings'][key[0]]['properties']
         if len(heads) < 1:
             heads = [k for k in mapping[index]['mappings']['properties'].keys()]
