@@ -251,7 +251,7 @@ class es_pandas(object):
             }
         }
         if self.es7:
-            tmpl['mappings'] ={'properties': columns_body}}
+            tmpl['mappings'] ={'properties': columns_body}
         else:
             tmpl['mappings'] = {'_default_':
                              {'properties': columns_body}
