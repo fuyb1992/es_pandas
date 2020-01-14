@@ -213,8 +213,6 @@ class es_pandas(object):
                         yield action
 
     def init_es_tmpl(self, df, doc_type, delete=False, shards_count=2, wait_time=5):
-        if self.es7:
-            return
         tmpl_exits = self.es.indices.exists_template(name=doc_type)
         if tmpl_exits and (not delete):
             return
@@ -239,9 +237,6 @@ class es_pandas(object):
 
         tmpl = {
             'template': '%s*' % doc_type,
-            'mappings': {'_default_':
-                             {'properties': columns_body}
-                         },
             'settings': {
                 'index': {
                     'refresh_interval': '5s',
@@ -255,6 +250,12 @@ class es_pandas(object):
                 }
             }
         }
+        if self.es7:
+            tmpl['mappings'] ={'properties': columns_body}}
+        else:
+            tmpl['mappings'] = {'_default_':
+                             {'properties': columns_body}
+                         }
         if tmpl_exits and delete:
             self.es.indices.delete_template(name=doc_type)
             print('Delete and put template: %s' % doc_type)
