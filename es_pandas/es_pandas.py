@@ -56,7 +56,7 @@ class es_pandas(object):
 
         return success_num
 
-    def to_pandas(self, index, query_rule={'query': {'match_all': {}}}, heads=[], dtype={}):
+    def to_pandas(self, index, query_rule=None, heads=[], dtype={}):
         """
         scroll datas from es, and convert to dataframe, the index of dataframe is from es index,
         about 2 million records/min
@@ -70,6 +70,7 @@ class es_pandas(object):
         Returns:
             DataFrame
         """
+        if query_rule is None: query_rule = {'query': {'match_all': {}}}
         scroll = '5m'
 
         count = self.es.count(index=index, body=query_rule)['count']
