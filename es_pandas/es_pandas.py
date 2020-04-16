@@ -74,7 +74,7 @@ class es_pandas(object):
         scroll = '5m'
 
         count = self.es.count(index=index, body=query_rule)['count']
-        if count < 0:
+        if count < 1:
             raise Exception('Empty for %s' % index)
         if self.es7:
             mapping = self.ic.get_mapping(index=index, include_type_name=False)
