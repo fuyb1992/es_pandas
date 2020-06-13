@@ -56,7 +56,25 @@ class es_pandas(object):
 
         return success_num
 
-    def to_pandas(self, index, query_rule=None, heads=[], dtype={}):
+    def get_source(self, anl):
+        for mes in anl:
+            yield mes['_source']
+
+    def infer_dtype(self, index, heads):
+        if self.es7:
+            mapping = self.ic.get_mapping(index=index, include_type_name=False)
+        else:
+            # Fix es client unrecongnized parameter 'include_type_name' bug for es 6.x
+            mapping = self.ic.get_mapping(index=index)
+            key = [k for k in mapping[index]['mappings'].keys() if k != '_default_']
+            if len(key) < 1: raise Exception('No templates exits: %s' % index)
+            mapping[index]['mappings']['properties'] = mapping[index]['mappings'][key[0]]['properties']
+        dtype = {k: v['type'] for k, v in mapping[index]['mappings']['properties'].items() if k in heads}
+        dtype = {k: self.dtype_mapping[v] for k, v in dtype.items() if v in self.dtype_mapping}
+        return dtype
+
+
+    def to_pandas(self, index, query_rule=None, heads=[], dtype={}, infer_dtype=False, **kwargs):
         """
         scroll datas from es, and convert to dataframe, the index of dataframe is from es index,
         about 2 million records/min
@@ -67,49 +85,23 @@ class es_pandas(object):
             chunk_size: maximum 10000
             heads: certain columns get from es fields, [] for all fields
             dtype: dict like, pandas dtypes for certain columns
+            infer_dtype: bool, default False, if true, get dtype from es template
         Returns:
             DataFrame
         """
-        if query_rule is None: query_rule = {'query': {'match_all': {}}}
-        scroll = '5m'
-
+        if query_rule is None:
+            query_rule = {'query': {'match_all': {}}}
         count = self.es.count(index=index, body=query_rule)['count']
         if count < 1:
             raise Exception('Empty for %s' % index)
-        if self.es7:
-            mapping = self.ic.get_mapping(index=index, include_type_name=False)
-        else:
-            # Fix es client unrecongnized parameter 'include_type_name' bug for es 6.x
-            mapping = self.ic.get_mapping(index=index)
-            key = [k for k in mapping[index]['mappings'].keys() if k != '_default_']
-            if len(key) < 1: raise Exception('No templates exits: %s' % index)
-            mapping[index]['mappings']['properties'] = mapping[index]['mappings'][key[0]]['properties']
-        if len(heads) < 1:
-            heads = [k for k in mapping[index]['mappings']['properties'].keys()]
-        else:
-            unknown_heads = set(heads) - mapping[index]['mappings']['properties'].keys()
-            if unknown_heads:
-                raise Exception('%s column not found in %s index' % (','.join(unknown_heads), index))
-
-        dtypes = {k: v['type'] for k, v in mapping[index]['mappings']['properties'].items() if k in heads}
-        dtypes = {k: self.dtype_mapping[v] for k, v in dtypes.items() if v in self.dtype_mapping}
-        if isinstance(dtype, dict):
-            dtypes.update(dtype)
-        else:
-            raise TypeError('dtype_mapping only accept dict')
-
         query_rule['_source'] = heads
-        df_li = defaultdict(list)
-        anl = helpers.scan(self.es, query=query_rule, index=index, raise_on_error=True, preserve_order=False,
-                           clear_scroll=True)
-
-        for _ in progressbar.progressbar(range(0, count)):
-            mes = next(anl)
-            for head in heads:
-                df_li[head].append(mes['_source'][head] if head in mes['_source'] else np.nan)
-            df_li[self.id_col].append(mes['_id'])
-
-        return pd.DataFrame(df_li).set_index(self.id_col).astype(dtypes)
+        anl = helpers.scan(self.es, query=query_rule, index=index, **kwargs)
+        df = pd.DataFrame(self.get_source(anl))
+        if infer_dtype:
+            dtype = self.infer_dtype(index, df.columns.values)
+        if len(dtype):
+            df = df.astype(dtype)
+        return df
 
     def delete_es(self, df, index, doc_type='_doc', key_col='', chunk_size=1000, thread_count=2):
         '''

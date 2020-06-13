@@ -60,6 +60,10 @@ dtype = {'Num': 'float', 'Alpha': object}
 df = ep.to_pandas(index, dtype=dtype)
 print(df.dtypes)
 
+# infer dtype from es template
+df = ep.to_pandas(index, infer_dtype=True)
+print(df.dtypes)
+
 # delete records from es
 ep.delete_es(df.iloc[0:10, :], index)
 
