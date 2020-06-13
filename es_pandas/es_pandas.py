@@ -56,7 +56,25 @@ class es_pandas(object):
 
         return success_num
 
-    def to_pandas(self, index, query_rule=None, heads=[], dtype={}):
+    def get_source(self, anl):
+        for mes in anl:
+            yield mes['_source']
+
+    def infer_dtype(self, index, heads):
+        if self.es7:
+            mapping = self.ic.get_mapping(index=index, include_type_name=False)
+        else:
+            # Fix es client unrecongnized parameter 'include_type_name' bug for es 6.x
+            mapping = self.ic.get_mapping(index=index)
+            key = [k for k in mapping[index]['mappings'].keys() if k != '_default_']
+            if len(key) < 1: raise Exception('No templates exits: %s' % index)
+            mapping[index]['mappings']['properties'] = mapping[index]['mappings'][key[0]]['properties']
+        dtype = {k: v['type'] for k, v in mapping[index]['mappings']['properties'].items() if k in heads}
+        dtype = {k: self.dtype_mapping[v] for k, v in dtype.items() if v in self.dtype_mapping}
+        return dtype
+
+
+    def to_pandas(self, index, query_rule=None, heads=[], dtype={}, infer_dtype=False, **kwargs):
         """
         scroll datas from es, and convert to dataframe, the index of dataframe is from es index,
         about 2 million records/min
@@ -67,49 +85,23 @@ class es_pandas(object):
             chunk_size: maximum 10000
             heads: certain columns get from es fields, [] for all fields
             dtype: dict like, pandas dtypes for certain columns
+            infer_dtype: bool, default False, if true, get dtype from es template
         Returns:
             DataFrame
         """
-        if query_rule is None: query_rule = {'query': {'match_all': {}}}
-        scroll = '5m'
-
+        if query_rule is None:
+            query_rule = {'query': {'match_all': {}}}
         count = self.es.count(index=index, body=query_rule)['count']
         if count < 1:
             raise Exception('Empty for %s' % index)
-        if self.es7:
-            mapping = self.ic.get_mapping(index=index, include_type_name=False)
-        else:
-            # Fix es client unrecongnized parameter 'include_type_name' bug for es 6.x
-            mapping = self.ic.get_mapping(index=index)
-            key = [k for k in mapping[index]['mappings'].keys() if k != '_default_']
-            if len(key) < 1: raise Exception('No templates exits: %s' % index)
-            mapping[index]['mappings']['properties'] = mapping[index]['mappings'][key[0]]['properties']
-        if len(heads) < 1:
-            heads = [k for k in mapping[index]['mappings']['properties'].keys()]
-        else:
-            unknown_heads = set(heads) - mapping[index]['mappings']['properties'].keys()
-            if unknown_heads:
-                raise Exception('%s column not found in %s index' % (','.join(unknown_heads), index))
-
-        dtypes = {k: v['type'] for k, v in mapping[index]['mappings']['properties'].items() if k in heads}
-        dtypes = {k: self.dtype_mapping[v] for k, v in dtypes.items() if v in self.dtype_mapping}
-        if isinstance(dtype, dict):
-            dtypes.update(dtype)
-        else:
-            raise TypeError('dtype_mapping only accept dict')
-
         query_rule['_source'] = heads
-        df_li = defaultdict(list)
-        anl = helpers.scan(self.es, query=query_rule, index=index, raise_on_error=True, preserve_order=False,
-                           clear_scroll=True)
-
-        for _ in progressbar.progressbar(range(0, count)):
-            mes = next(anl)
-            for head in heads:
-                df_li[head].append(mes['_source'][head] if head in mes['_source'] else np.nan)
-            df_li[self.id_col].append(mes['_id'])
-
-        return pd.DataFrame(df_li).set_index(self.id_col).astype(dtypes)
+        anl = helpers.scan(self.es, query=query_rule, index=index, **kwargs)
+        df = pd.DataFrame(self.get_source(anl))
+        if infer_dtype:
+            dtype = self.infer_dtype(index, df.columns.values)
+        if len(dtype):
+            df = df.astype(dtype)
+        return df
 
     def delete_es(self, df, index, doc_type='_doc', key_col='', chunk_size=1000, thread_count=2):
         '''
@@ -172,19 +164,7 @@ class es_pandas(object):
         for i in progressbar.progressbar(range(math.ceil(len(df) / chunk_size))):
             start_index = i * chunk_size
             end_index = min((i + 1) * chunk_size, len(df))
-            if _op_type == 'update':
-                for id, record in zip(df.iloc[start_index: end_index].index.values,
-                                      df.iloc[start_index: end_index].to_json(orient='records', date_format='iso',
-                                                                                 lines=True).split('\n')):
-                    action = {
-                        '_op_type': _op_type,
-                        '_index': index,
-                        '_type': doc_type,
-                        '_id': to_int(id),
-                        'doc': record
-                    }
-                    yield action
-            elif _op_type == 'delete':
+            if _op_type == 'delete':
                 for id in df.iloc[start_index: end_index, :].index.values:
                     action = {
                         '_op_type': _op_type,
@@ -263,71 +243,6 @@ class es_pandas(object):
         self.es.indices.put_template(name=doc_type, body=tmpl)
         print('New template %s added' % doc_type)
         time.sleep(wait_time)
-
-    def update_to_es(self, df, index, key_col, ignore_cols=[], append=False, doc_type=None, thread_count=2,
-                     chunk_size=1000, success_threshold=0.9):
-        if self.es7:
-            doc_type = '_doc'
-        if not doc_type:
-            doc_type = index + '_type'
-        round = math.ceil(len(df) / chunk_size)
-        columns = df.columns.values.tolist()
-        change_num = 0
-        change_sucess_num = 0
-        add_num = 0
-        add_sucess_num = 0
-
-        for i in progressbar.progressbar(range(0, round)):
-            new_df = df.iloc[i * chunk_size: min((i + 1) * chunk_size, len(df)), :]
-            query_rule = {'query': {'terms': {key_col: new_df[key_col].values.tolist()}}}
-            old_df = self.to_pandas(index, query_rule=query_rule, heads=columns)
-            change_df, _, add_df = self.compare(old_df, new_df, key_col, ignore_cols=ignore_cols)
-            change_num += len(change_df)
-            add_num += len(add_df)
-
-            if append:
-                # to be continued
-                pass
-            else:
-                change_gen = helpers.parallel_bulk(self.es,
-                                                   self.rec_to_actions(change_df, index, doc_type,
-                                                                       chunk_size=chunk_size, _op_type='delete'),
-                                                   thread_count=thread_count, chunk_size=chunk_size)
-                add_df = pd.concat([change_df, add_df])
-            add_gen = helpers.parallel_bulk(self.es,
-                                            self.rec_to_actions(add_df, index, doc_type, chunk_size=chunk_size),
-                                            thread_count=thread_count, chunk_size=chunk_size)
-            num1, num2 = np.sum([res[0] for res in change_gen]), np.sum([res[0] for res in add_gen])
-
-    def compare(self, old_df, new_df, key_col, ignore_cols=[]):
-        """
-        :param old_df: old DataFrame
-        :param new_df: new DataFrame
-        :param key: unique key column name, str
-        :param ingore_cols: compare ignore columns names, list
-        :return:
-        """
-        assert isinstance(key_col, str)
-        assert isinstance(ignore_cols, list)
-
-        merge = pd.merge(old_df.reset_index(), new_df, on=key_col, how='inner', left_index=True, suffixes=('_', ''))
-        # drop merged rows
-        new_df = new_df.copy()
-        new_df.drop(merge.index, inplace=True)
-        merge['change'] = 0
-
-        ignore_cols = set(ignore_cols + [self.id_col, key_col])
-        for col in set(old_df.columns.values) - ignore_cols:
-            if merge[col].dtype.name == 'category':
-                merge[col] = merge[col].astype(object)
-            if merge[col].dtype.name == 'datetime64[ns]':
-                merge['change'] += abs(merge[col + '_'] - merge[col]) > pd.to_timedelta('1 s')
-            else:
-                merge['change'] += merge[col + '_'] != merge[col]
-
-        merge = merge.set_index(self.id_col)
-        index = merge['change'] > 0
-        return merge[index][new_df.columns.values], merge[~index][new_df.columns.values], new_df
 
 
 def to_int(o):

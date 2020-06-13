@@ -37,12 +37,6 @@ df = ep.to_pandas(index, heads=heads, dtype=dtype)
 print(df.head())
 print(df.dtypes)
 
-time.sleep(5)
-df2 = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 129)],
-                    'Num': [x for x in range(32)],
-                    'Date': pd.date_range(start='2019/01/01', end='2019/02/01')})
-
-df2.loc[df2['Num']==10, ['Alpha']] = 'change'
-
-# Example of update data in es
-ep.to_es_dev(df2, index, 'Num', doc_type=doc_type)
+# infer dtypes from es template
+df = ep.to_pandas(index, infer_dtype=True)
+print(df.dtypes)

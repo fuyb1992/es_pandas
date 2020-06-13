@@ -60,23 +60,13 @@ dtype = {'Num': 'float', 'Alpha': object}
 df = ep.to_pandas(index, dtype=dtype)
 print(df.dtypes)
 
+# infer dtype from es template
+df = ep.to_pandas(index, infer_dtype=True)
+print(df.dtypes)
+
 # delete records from es
 ep.delete_es(df.iloc[0:10, :], index)
 
-
-df2 = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 129)],
-                    'Num': [x for x in range(32)],
-                    'Date': pd.date_range(start='2019/01/01', end='2019/02/01')})
-
-df2.loc[df2['Num']==10, ['Alpha']] = 'change'
-
-# Example of update data in es
-ep.to_es_dev(df2, index, 'Num', doc_type=doc_type)
-```
-### More about update
-`to_es_dev(df, index, key_col, ignore_cols=[])` function is available if you want to write or update data with ElasticSearch.
-
-`to_es_dev` function writes `df` to es if `index` not exits, or it reads data from ElasticSearch in batches, and compare the data with `df` by merging them on `key_col`, if you want to ignore some columns when comparing, set it with `ignore_col` parameter. Moreover, new records in `df` will be written to ElasticSearch.
 
 ## License
 (c) 2019 Frank
