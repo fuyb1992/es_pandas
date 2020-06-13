@@ -1,4 +1,4 @@
 pandas>=0.24
-elasticsearch>=6.0
+elasticsearch<=7.0.0
 progressbar2
 requests
