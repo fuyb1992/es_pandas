@@ -164,19 +164,7 @@ class es_pandas(object):
         for i in progressbar.progressbar(range(math.ceil(len(df) / chunk_size))):
             start_index = i * chunk_size
             end_index = min((i + 1) * chunk_size, len(df))
-            if _op_type == 'update':
-                for id, record in zip(df.iloc[start_index: end_index].index.values,
-                                      df.iloc[start_index: end_index].to_json(orient='records', date_format='iso',
-                                                                                 lines=True).split('\n')):
-                    action = {
-                        '_op_type': _op_type,
-                        '_index': index,
-                        '_type': doc_type,
-                        '_id': to_int(id),
-                        'doc': record
-                    }
-                    yield action
-            elif _op_type == 'delete':
+            if _op_type == 'delete':
                 for id in df.iloc[start_index: end_index, :].index.values:
                     action = {
                         '_op_type': _op_type,
@@ -255,71 +243,6 @@ class es_pandas(object):
         self.es.indices.put_template(name=doc_type, body=tmpl)
         print('New template %s added' % doc_type)
         time.sleep(wait_time)
-
-    def update_to_es(self, df, index, key_col, ignore_cols=[], append=False, doc_type=None, thread_count=2,
-                     chunk_size=1000, success_threshold=0.9):
-        if self.es7:
-            doc_type = '_doc'
-        if not doc_type:
-            doc_type = index + '_type'
-        round = math.ceil(len(df) / chunk_size)
-        columns = df.columns.values.tolist()
-        change_num = 0
-        change_sucess_num = 0
-        add_num = 0
-        add_sucess_num = 0
-
-        for i in progressbar.progressbar(range(0, round)):
-            new_df = df.iloc[i * chunk_size: min((i + 1) * chunk_size, len(df)), :]
-            query_rule = {'query': {'terms': {key_col: new_df[key_col].values.tolist()}}}
-            old_df = self.to_pandas(index, query_rule=query_rule, heads=columns)
-            change_df, _, add_df = self.compare(old_df, new_df, key_col, ignore_cols=ignore_cols)
-            change_num += len(change_df)
-            add_num += len(add_df)
-
-            if append:
-                # to be continued
-                pass
-            else:
-                change_gen = helpers.parallel_bulk(self.es,
-                                                   self.rec_to_actions(change_df, index, doc_type,
-                                                                       chunk_size=chunk_size, _op_type='delete'),
-                                                   thread_count=thread_count, chunk_size=chunk_size)
-                add_df = pd.concat([change_df, add_df])
-            add_gen = helpers.parallel_bulk(self.es,
-                                            self.rec_to_actions(add_df, index, doc_type, chunk_size=chunk_size),
-                                            thread_count=thread_count, chunk_size=chunk_size)
-            num1, num2 = np.sum([res[0] for res in change_gen]), np.sum([res[0] for res in add_gen])
-
-    def compare(self, old_df, new_df, key_col, ignore_cols=[]):
-        """
-        :param old_df: old DataFrame
-        :param new_df: new DataFrame
-        :param key: unique key column name, str
-        :param ingore_cols: compare ignore columns names, list
-        :return:
-        """
-        assert isinstance(key_col, str)
-        assert isinstance(ignore_cols, list)
-
-        merge = pd.merge(old_df.reset_index(), new_df, on=key_col, how='inner', left_index=True, suffixes=('_', ''))
-        # drop merged rows
-        new_df = new_df.copy()
-        new_df.drop(merge.index, inplace=True)
-        merge['change'] = 0
-
-        ignore_cols = set(ignore_cols + [self.id_col, key_col])
-        for col in set(old_df.columns.values) - ignore_cols:
-            if merge[col].dtype.name == 'category':
-                merge[col] = merge[col].astype(object)
-            if merge[col].dtype.name == 'datetime64[ns]':
-                merge['change'] += abs(merge[col + '_'] - merge[col]) > pd.to_timedelta('1 s')
-            else:
-                merge['change'] += merge[col + '_'] != merge[col]
-
-        merge = merge.set_index(self.id_col)
-        index = merge['change'] > 0
-        return merge[index][new_df.columns.values], merge[~index][new_df.columns.values], new_df
 
 
 def to_int(o):
