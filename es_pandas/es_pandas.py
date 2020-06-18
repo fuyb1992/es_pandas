@@ -1,5 +1,4 @@
 import os
-import json
 import time
 import math
 import progressbar
@@ -146,14 +145,13 @@ class es_pandas(object):
                     yield action
             elif _op_type == 'update':
                 for id, record in zip(df.iloc[start_index: end_index].index.values,
-                                      df.iloc[start_index: end_index].to_json(orient='records', date_format='iso',
-                                                                              lines=True).split('\n')):
+                                      df.iloc[start_index: end_index].to_dict(orient='records')):
                     action = {
                         '_op_type': _op_type,
                         '_index': index,
                         '_type': doc_type,
                         '_id': id,
-                        'doc': json.loads(record)
+                        'doc': record
                     }
                     yield action
             else:
