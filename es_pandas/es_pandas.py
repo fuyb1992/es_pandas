@@ -26,7 +26,7 @@ class es_pandas(object):
         self.es7 = self.es.info()['version']['number'].startswith('7.')
 
     def to_es(self, df, index, doc_type=None, use_index=False, thread_count=2, chunk_size=1000, request_timeout=60,
-              success_threshold=0.9, _op_type=None):
+              success_threshold=0.9, _op_type='create'):
         '''
         :param df: pandas DataFrame data
         :param index: full name of es indices
@@ -43,7 +43,7 @@ class es_pandas(object):
             doc_type = '_doc'
         if not doc_type:
             doc_type = index + '_type'
-        gen = helpers.parallel_bulk(self.es, (self.rec_to_actions(df, index, doc_type=doc_type, use_index=use_index, chunk_size=chunk_size, _op_type=_op_type)),
+        gen = helpers.parallel_bulk(self.es, (self.rec_to_actions(df, index, doc_type=doc_type, use_index=use_index, _op_type=_op_type)),
                                     thread_count=thread_count,
                                     chunk_size=chunk_size, raise_on_error=True, request_timeout=request_timeout)
 
@@ -126,53 +126,52 @@ class es_pandas(object):
         if len(key_col):
             df = df.copy().set_index(key_col)
         delete_gen = helpers.parallel_bulk(self.es,
-                                           self.rec_to_actions(df, index, doc_type, chunk_size=chunk_size, _op_type='delete'),
+                                           self.rec_to_actions(df, index, doc_type, _op_type='delete'),
                                            thread_count=thread_count, chunk_size=chunk_size)
         return np.sum([res[0] for res in delete_gen])
 
-    def rec_to_actions(self, df, index, doc_type, use_index=False, chunk_size=1000, _op_type=None):
-        for i in progressbar.progressbar(range(math.ceil(len(df) / chunk_size))):
-            start_index = i * chunk_size
-            end_index = min((i + 1) * chunk_size, len(df))
-            if _op_type == 'delete':
-                for id in df.iloc[start_index: end_index, :].index.values:
-                    action = {
-                        '_op_type': _op_type,
-                        '_index': index,
-                        '_type': doc_type,
-                        '_id': to_int(id)
-                    }
-                    yield action
-            elif _op_type == 'update':
-                for id, record in zip(df.iloc[start_index: end_index].index.values,
-                                      df.iloc[start_index: end_index].to_dict(orient='records')):
-                    action = {
-                        '_op_type': _op_type,
-                        '_index': index,
-                        '_type': doc_type,
-                        '_id': id,
-                        'doc': record
-                    }
-                    yield action
-            else:
-                if use_index:
-                    for id, record in zip(df.iloc[start_index: end_index, :].index.values,
-                                          df.iloc[start_index: end_index, :].to_json(orient='records', date_format='iso',
-                                                                             lines=True).split('\n')):
-                        action = {
-                            '_index': index,
-                            '_type': doc_type,
-                            '_id': to_int(id),
-                            '_source': record}
-                        yield action
-                else:
-                    for record in df.iloc[start_index: end_index, :].to_json(orient='records', date_format='iso',
-                                                                             lines=True).split('\n'):
-                        action = {
-                            '_index': index,
-                            '_type': doc_type,
-                            '_source': record}
-                        yield action
+    def rec_to_actions(self, df, index, doc_type, use_index=False, _op_type=None):
+        columns = df.columns.tolist()
+        if _op_type == 'create' and use_index:
+            for row in df.itertuples(name=None, index=use_index):
+                _id = row[0]
+                record = dict(zip(columns, row[1:]))
+                action = {
+                    '_op_type': _op_type,
+                    '_index': index,
+                    '_type': doc_type,
+                    '_id': _id,
+                    '_source': record}
+                yield action
+        elif _op_type == 'create' and not use_index:
+            for row in df.itertuples(name=None, index=use_index):
+                record = dict(zip(columns, row))
+                action = {
+                    '_op_type': _op_type,
+                    '_index': index,
+                    '_type': doc_type,
+                    '_source': record}
+                yield action
+        elif _op_type == 'update':
+            for row in df.itertuples(name=None, index=True):
+                _id = row[0]
+                record = dict(zip(columns, row[1:]))
+                action = {
+                    '_op_type': _op_type,
+                    '_index': index,
+                    '_type': doc_type,
+                    '_id': _id,
+                    'doc': record}
+                yield action
+        elif _op_type == 'delete':
+            for _id in df.index.values.tolist():
+                action = {
+                    '_op_type': _op_type,
+                    '_index': index,
+                    '_type': doc_type,
+                    '_id': _id
+                }
+                yield action
 
     def init_es_tmpl(self, df, doc_type, delete=False, shards_count=2, wait_time=5):
         tmpl_exits = self.es.indices.exists_template(name=doc_type)
