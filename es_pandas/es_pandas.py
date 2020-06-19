@@ -26,7 +26,7 @@ class es_pandas(object):
         self.es7 = self.es.info()['version']['number'].startswith('7.')
 
     def to_es(self, df, index, doc_type=None, use_index=False, thread_count=2, chunk_size=1000, request_timeout=60,
-              success_threshold=0.9):
+              success_threshold=0.9, _op_type=None):
         '''
         :param df: pandas DataFrame data
         :param index: full name of es indices
@@ -43,7 +43,7 @@ class es_pandas(object):
             doc_type = '_doc'
         if not doc_type:
             doc_type = index + '_type'
-        gen = helpers.parallel_bulk(self.es, (self.rec_to_actions(df, index, doc_type=doc_type, use_index=use_index, chunk_size=chunk_size)),
+        gen = helpers.parallel_bulk(self.es, (self.rec_to_actions(df, index, doc_type=doc_type, use_index=use_index, chunk_size=chunk_size, _op_type=_op_type)),
                                     thread_count=thread_count,
                                     chunk_size=chunk_size, raise_on_error=True, request_timeout=request_timeout)
 
@@ -141,6 +141,17 @@ class es_pandas(object):
                         '_index': index,
                         '_type': doc_type,
                         '_id': to_int(id)
+                    }
+                    yield action
+            elif _op_type == 'update':
+                for id, record in zip(df.iloc[start_index: end_index].index.values,
+                                      df.iloc[start_index: end_index].to_dict(orient='records')):
+                    action = {
+                        '_op_type': _op_type,
+                        '_index': index,
+                        '_type': doc_type,
+                        '_id': id,
+                        'doc': record
                     }
                     yield action
             else:
