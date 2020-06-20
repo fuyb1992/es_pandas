@@ -13,23 +13,40 @@ index = 'demo'
 ep = es_pandas(es_host)
 
 # Example data frame
-df = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 128)],
-                    'Num': [x for x in range(31)],
-                    'Date': pd.date_range(start='2019/01/01', end='2019/01/31')})
-
+df = pd.DataFrame({'Num': [x for x in range(100000)]})
+df['Alpha'] = 'Hello'
+df['Date'] = pd.datetime.now()
 # init template if you want
 doc_type = 'demo'
 ep.init_es_tmpl(df, doc_type, delete=True)
 
 # Example of write data to es
+ep.to_es(df, index, doc_type=doc_type)
+print('write es doc without index finished')
+
+# Example of use DataFrame index as es doc _id
 ep.to_es(df, index, doc_type=doc_type, use_index=True)
+print('write es doc with index finished')
 
 # waiting for es data writing
 time.sleep(5)
-ep.delete_es(df.iloc[0:10, :], index)
+
+# Delete doc by doc _id
+ep.to_es(df.iloc[5000:], index, doc_type=doc_type, _op_type='delete')
+print('delete es doc finished')
 
 # waiting for es data writing
 time.sleep(5)
+
+# Update doc by doc _id
+df.iloc[:1000, 1] = 'Bye'
+df.iloc[:1000, 2] = pd.datetime.now()
+ep.to_es(df.iloc[:1000, 1:], index, doc_type=doc_type, _op_type='update')
+print('update es doc finished')
+
+# waiting for es data writing
+time.sleep(5)
+
 # get certain fields from es, set certain columns dtype
 heads = ['Num', 'Date', 'Alpha']
 dtype = {'Num': 'float', 'Alpha': object}

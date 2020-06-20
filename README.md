@@ -31,9 +31,9 @@ index = 'demo'
 ep = es_pandas(es_host)
 
 # Example data frame
-df = pd.DataFrame({'Alpha': [chr(i) for i in range(97, 128)], 
-                    'Num': [x for x in range(31)], 
-                    'Date': pd.date_range(start='2019/01/01', end='2019/01/31')})
+df = pd.DataFrame({'Num': [x for x in range(100000)]})
+df['Alpha'] = 'Hello'
+df['Date'] = pd.datetime.now()
 
 # init template if you want
 doc_type = 'demo'
@@ -41,10 +41,17 @@ ep.init_es_tmpl(df, doc_type)
 
 # Example of write data to es, use the template you create
 ep.to_es(df, index, doc_type=doc_type)
+
 # set use_index=True if you want to use DataFrame index as records' _id
 ep.to_es(df, index, doc_type=doc_type, use_index=True)
 
-time.sleep(10)
+# delete records from es
+ep.to_es(df.iloc[5000:], index, doc_type=doc_type, _op_type='delete')
+
+# Update doc by doc _id
+df.iloc[:1000, 1] = 'Bye'
+df.iloc[:1000, 2] = pd.datetime.now()
+ep.to_es(df.iloc[:1000, 1:], index, doc_type=doc_type, _op_type='update')
 
 # Example of read data from es
 df = ep.to_pandas(index)
@@ -63,7 +70,4 @@ print(df.dtypes)
 # infer dtype from es template
 df = ep.to_pandas(index, infer_dtype=True)
 print(df.dtypes)
-
-# delete records from es
-ep.delete_es(df.iloc[0:10, :], index)
 ```
