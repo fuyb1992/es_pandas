@@ -26,7 +26,7 @@ class es_pandas(object):
         self.es7 = self.es.info()['version']['number'].startswith('7.')
 
     def to_es(self, df, index, doc_type=None, use_index=False, thread_count=2, chunk_size=1000, request_timeout=60,
-              success_threshold=0.9, _op_type='create'):
+              success_threshold=0.9, _op_type='index'):
         '''
         :param df: pandas DataFrame data
         :param index: full name of es indices
@@ -37,6 +37,7 @@ class es_pandas(object):
         :param chunk_size: number of docs in one chunk sent to es
         :param request_timeout:
         :param success_threshold:
+        :param _op_type: elasticsearch _op_type, default 'index', choices: 'index', 'create', 'update', 'delete'
         :return: num of the number of data written into es successfully
         '''
         if self.es7:
@@ -111,29 +112,12 @@ class es_pandas(object):
             df = df.astype(dtype)
         return df
 
-    def delete_es(self, df, index, doc_type='_doc', key_col='', chunk_size=1000, thread_count=2):
-        '''
-
-        :param df: DataFrame you want to delete from elasticsearch
-        :param index: elasticsearch index
-        :param doc_type: elasticsearch doc type, _doc default for es 7
-        :param key_col: default use DataFrame index
-        :param chunk_size:
-        :param thread_count:
-        :return: number of deleted records
-        '''
-        assert isinstance(key_col, str)
-        if len(key_col):
-            df = df.copy().set_index(key_col)
-        delete_gen = helpers.parallel_bulk(self.es,
-                                           self.rec_to_actions(df, index, doc_type, _op_type='delete'),
-                                           thread_count=thread_count, chunk_size=chunk_size)
-        return np.sum([res[0] for res in delete_gen])
-
-    def rec_to_actions(self, df, index, doc_type, use_index=False, _op_type=None):
+    def rec_to_actions(self, df, index, doc_type, use_index=False, _op_type='index'):
+        bar = progressbar.ProgressBar(max_value=df.shape[0])
         columns = df.columns.tolist()
-        if _op_type == 'create' and use_index:
-            for row in df.itertuples(name=None, index=use_index):
+        if use_index and (_op_type in ['create', 'index']):
+            for i, row in enumerate(df.itertuples(name=None, index=use_index)):
+                bar.update(i)
                 _id = row[0]
                 record = dict(zip(columns, row[1:]))
                 action = {
@@ -143,8 +127,9 @@ class es_pandas(object):
                     '_id': _id,
                     '_source': record}
                 yield action
-        elif _op_type == 'create' and not use_index:
-            for row in df.itertuples(name=None, index=use_index):
+        elif (not use_index) and (_op_type == 'index'):
+            for i, row in enumerate(df.itertuples(name=None, index=use_index)):
+                bar.update(i)
                 record = dict(zip(columns, row))
                 action = {
                     '_op_type': _op_type,
@@ -153,7 +138,8 @@ class es_pandas(object):
                     '_source': record}
                 yield action
         elif _op_type == 'update':
-            for row in df.itertuples(name=None, index=True):
+            for i, row in enumerate(df.itertuples(name=None, index=True)):
+                bar.update(i)
                 _id = row[0]
                 record = dict(zip(columns, row[1:]))
                 action = {
@@ -164,7 +150,8 @@ class es_pandas(object):
                     'doc': record}
                 yield action
         elif _op_type == 'delete':
-            for _id in df.index.values.tolist():
+            for i, _id in enumerate(df.index.values.tolist()):
+                bar.update(i)
                 action = {
                     '_op_type': _op_type,
                     '_index': index,
@@ -172,6 +159,8 @@ class es_pandas(object):
                     '_id': _id
                 }
                 yield action
+        else:
+            raise Exception('[%s] action with %s using index not supported' %(_op_type, '' if use_index else 'not'))
 
     def init_es_tmpl(self, df, doc_type, delete=False, shards_count=2, wait_time=5):
         tmpl_exits = self.es.indices.exists_template(name=doc_type)
@@ -223,8 +212,3 @@ class es_pandas(object):
         self.es.indices.put_template(name=doc_type, body=tmpl)
         print('New template %s added' % doc_type)
         time.sleep(wait_time)
-
-
-def to_int(o):
-    if isinstance(o, np.integer): return int(o)
-    return o
