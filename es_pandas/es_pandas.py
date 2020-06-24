@@ -175,7 +175,7 @@ class es_pandas(object):
         else:
             raise Exception('init tmpl type is error, only accept DataFrame or dict of head with type mapping')
         for key, data_type in iter_dict.items():
-            type_str = getattr(data_type, 'name', data_type)
+            type_str = getattr(data_type, 'name', data_type).lower()
             if 'int' in type_str:
                 columns_body[key] = {'type': 'long'}
             elif 'datetime' in type_str:
