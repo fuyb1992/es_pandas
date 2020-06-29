@@ -16,6 +16,9 @@ ep = es_pandas(es_host)
 df = pd.DataFrame({'Num': [x for x in range(100000)]})
 df['Alpha'] = 'Hello'
 df['Date'] = pd.datetime.now()
+# add null value
+df.iloc[0] = None
+
 # init template if you want
 doc_type = 'demo'
 ep.init_es_tmpl(df, doc_type, delete=True)

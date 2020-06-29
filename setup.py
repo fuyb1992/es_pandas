@@ -5,7 +5,7 @@ with open('README.md', 'r') as fh:
 
 setuptools.setup(
     name='es_pandas',
-    version='0.0.13',
+    version='0.0.14',
     author='Frank',
     author_email='fu.frank@foxmail.com',
     description='Read, write and update large scale pandas DataFrame with ElasticSearch',

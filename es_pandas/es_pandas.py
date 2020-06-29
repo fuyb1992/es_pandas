@@ -1,8 +1,5 @@
-import os
 import time
-import math
 import progressbar
-from typing import Iterable
 
 if not progressbar.__version__.startswith('3.'):
     raise Exception('Incorrect version of progerssbar package, please do pip install progressbar2')
@@ -10,9 +7,8 @@ if not progressbar.__version__.startswith('3.'):
 import numpy as np
 import pandas as pd
 
-from collections import defaultdict
 from elasticsearch import Elasticsearch, helpers
-from elasticsearch.client import IndicesClient, CatClient
+from elasticsearch.client import IndicesClient
 
 
 class es_pandas(object):
@@ -20,7 +16,7 @@ class es_pandas(object):
 
     def __init__(self, *args, **kwargs):
         self.es = Elasticsearch(*args, **kwargs)
-        self.ic = IndicesClient(self.es)
+        self.ic = self.es.indices
         self.dtype_mapping = {'text': 'category', 'date': 'datetime64[ns]'}
         self.id_col = '_id'
         self.es7 = self.es.info()['version']['number'].startswith('7.')
@@ -119,7 +115,7 @@ class es_pandas(object):
             for i, row in enumerate(df.itertuples(name=None, index=use_index)):
                 bar.update(i)
                 _id = row[0]
-                record = dict(zip(columns, row[1:]))
+                record = dict(zip(columns, [None if pd.isna(r) else r for r in row[1:]]))
                 action = {
                     '_op_type': _op_type,
                     '_index': index,
@@ -130,7 +126,7 @@ class es_pandas(object):
         elif (not use_index) and (_op_type == 'index'):
             for i, row in enumerate(df.itertuples(name=None, index=use_index)):
                 bar.update(i)
-                record = dict(zip(columns, row))
+                record = dict(zip(columns, [None if pd.isna(r) else r for r in row]))
                 action = {
                     '_op_type': _op_type,
                     '_index': index,
@@ -141,7 +137,7 @@ class es_pandas(object):
             for i, row in enumerate(df.itertuples(name=None, index=True)):
                 bar.update(i)
                 _id = row[0]
-                record = dict(zip(columns, row[1:]))
+                record = dict(zip(columns, [None if pd.isna(r) else r for r in row[1:]]))
                 action = {
                     '_op_type': _op_type,
                     '_index': index,
