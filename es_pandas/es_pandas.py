@@ -7,8 +7,8 @@ if not progressbar.__version__.startswith('3.'):
 import numpy as np
 import pandas as pd
 
+from pandas.io import json
 from elasticsearch import Elasticsearch, helpers
-from elasticsearch.client import IndicesClient
 
 
 class es_pandas(object):
@@ -22,7 +22,7 @@ class es_pandas(object):
         self.es7 = self.es.info()['version']['number'].startswith('7.')
 
     def to_es(self, df, index, doc_type=None, use_index=False, thread_count=2, chunk_size=1000, request_timeout=60,
-              success_threshold=0.9, _op_type='index'):
+              success_threshold=0.9, _op_type='index', use_pandas_json=False, date_format='iso'):
         '''
         :param df: pandas DataFrame data
         :param index: full name of es indices
@@ -34,13 +34,18 @@ class es_pandas(object):
         :param request_timeout:
         :param success_threshold:
         :param _op_type: elasticsearch _op_type, default 'index', choices: 'index', 'create', 'update', 'delete'
+        :param use_pandas_json: default False, if True, use pandas.io.json serialize
+        :param date_format: default iso, only works when use_pandas_json=True
         :return: num of the number of data written into es successfully
         '''
         if self.es7:
             doc_type = '_doc'
         if not doc_type:
             doc_type = index + '_type'
-        gen = helpers.parallel_bulk(self.es, (self.rec_to_actions(df, index, doc_type=doc_type, use_index=use_index, _op_type=_op_type)),
+        gen = helpers.parallel_bulk(self.es,
+                                    (self.rec_to_actions(df, index, doc_type=doc_type,
+                                                         use_index=use_index, _op_type=_op_type,
+                                                         use_pandas_json=use_pandas_json, date_format=date_format)),
                                     thread_count=thread_count,
                                     chunk_size=chunk_size, raise_on_error=True, request_timeout=request_timeout)
 
@@ -108,14 +113,21 @@ class es_pandas(object):
             df = df.astype(dtype)
         return df
 
-    def rec_to_actions(self, df, index, doc_type, use_index=False, _op_type='index'):
+    @staticmethod
+    def serialize(row, columns, use_pandas_json, iso_dates):
+        if use_pandas_json:
+            return json.dumps(dict(zip(columns, row)), iso_dates=iso_dates)
+        return dict(zip(columns, [None if pd.isna(r) else r for r in row]))
+
+    def rec_to_actions(self, df, index, doc_type, use_index=False, _op_type='index', use_pandas_json=False, date_format='iso'):
         bar = progressbar.ProgressBar(max_value=df.shape[0])
         columns = df.columns.tolist()
+        iso_dates = date_format == 'iso'
         if use_index and (_op_type in ['create', 'index']):
             for i, row in enumerate(df.itertuples(name=None, index=use_index)):
                 bar.update(i)
                 _id = row[0]
-                record = dict(zip(columns, [None if pd.isna(r) else r for r in row[1:]]))
+                record = self.serialize(row[1:], columns, use_pandas_json, iso_dates)
                 action = {
                     '_op_type': _op_type,
                     '_index': index,
@@ -126,7 +138,7 @@ class es_pandas(object):
         elif (not use_index) and (_op_type == 'index'):
             for i, row in enumerate(df.itertuples(name=None, index=use_index)):
                 bar.update(i)
-                record = dict(zip(columns, [None if pd.isna(r) else r for r in row]))
+                record = self.serialize(row, columns, use_pandas_json, iso_dates)
                 action = {
                     '_op_type': _op_type,
                     '_index': index,
@@ -137,7 +149,7 @@ class es_pandas(object):
             for i, row in enumerate(df.itertuples(name=None, index=True)):
                 bar.update(i)
                 _id = row[0]
-                record = dict(zip(columns, [None if pd.isna(r) else r for r in row[1:]]))
+                record = self.serialize(row[1:], columns, False, iso_dates)
                 action = {
                     '_op_type': _op_type,
                     '_index': index,

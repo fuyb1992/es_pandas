@@ -60,3 +60,7 @@ print(df.dtypes)
 # infer dtypes from es template
 df = ep.to_pandas(index, infer_dtype=True)
 print(df.dtypes)
+
+# Example of write data to es with pandas.io.json
+ep.to_es(df, index, doc_type=doc_type, use_pandas_json=True)
+print('write es doc with pandas.io.json finished')
