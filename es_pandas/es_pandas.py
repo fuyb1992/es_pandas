@@ -119,6 +119,10 @@ class es_pandas(object):
             return json.dumps(dict(zip(columns, row)), iso_dates=iso_dates)
         return dict(zip(columns, [None if pd.isna(r) else r for r in row]))
 
+    @staticmethod
+    def gen_action(**kwargs):
+        return kwargs
+
     def rec_to_actions(self, df, index, doc_type, use_index=False, _op_type='index', use_pandas_json=False, date_format='iso'):
         bar = progressbar.ProgressBar(max_value=df.shape[0])
         columns = df.columns.tolist()
@@ -128,47 +132,28 @@ class es_pandas(object):
                 bar.update(i)
                 _id = row[0]
                 record = self.serialize(row[1:], columns, use_pandas_json, iso_dates)
-                action = {
-                    '_op_type': _op_type,
-                    '_index': index,
-                    '_type': doc_type,
-                    '_id': _id,
-                    '_source': record}
+                action = self.gen_action(_op_type=_op_type, _index=index, _type=doc_type, _id=_id, _source=record)
                 yield action
         elif (not use_index) and (_op_type == 'index'):
             for i, row in enumerate(df.itertuples(name=None, index=use_index)):
                 bar.update(i)
                 record = self.serialize(row, columns, use_pandas_json, iso_dates)
-                action = {
-                    '_op_type': _op_type,
-                    '_index': index,
-                    '_type': doc_type,
-                    '_source': record}
+                action = self.gen_action(_op_type=_op_type, _index=index, _type=doc_type, _source=record)
                 yield action
         elif _op_type == 'update':
             for i, row in enumerate(df.itertuples(name=None, index=True)):
                 bar.update(i)
                 _id = row[0]
                 record = self.serialize(row[1:], columns, False, iso_dates)
-                action = {
-                    '_op_type': _op_type,
-                    '_index': index,
-                    '_type': doc_type,
-                    '_id': _id,
-                    'doc': record}
+                action = self.gen_action(_op_type=_op_type, _index=index, _type=doc_type, _id=_id, doc=record)
                 yield action
         elif _op_type == 'delete':
             for i, _id in enumerate(df.index.values.tolist()):
                 bar.update(i)
-                action = {
-                    '_op_type': _op_type,
-                    '_index': index,
-                    '_type': doc_type,
-                    '_id': _id
-                }
+                action = self.gen_action(_op_type=_op_type, _index=index, _type=doc_type, _id=_id)
                 yield action
         else:
-            raise Exception('[%s] action with %s using index not supported' %(_op_type, '' if use_index else 'not'))
+            raise Exception('[%s] action with %s using index not supported' % (_op_type, '' if use_index else 'not'))
 
     def init_es_tmpl(self, df, doc_type, delete=False, shards_count=2, wait_time=5):
         tmpl_exits = self.es.indices.exists_template(name=doc_type)
