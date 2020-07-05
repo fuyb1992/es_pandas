@@ -40,13 +40,13 @@ doc_type = 'demo'
 ep.init_es_tmpl(df, doc_type)
 
 # Example of write data to es, use the template you create
-ep.to_es(df, index, doc_type=doc_type)
+ep.to_es(df, index, doc_type=doc_type, thread_count=2, chunk_size=10000)
 
 # set use_index=True if you want to use DataFrame index as records' _id
-ep.to_es(df, index, doc_type=doc_type, use_index=True)
+ep.to_es(df, index, doc_type=doc_type, use_index=True, thread_count=2, chunk_size=10000)
 
 # delete records from es
-ep.to_es(df.iloc[5000:], index, doc_type=doc_type, _op_type='delete')
+ep.to_es(df.iloc[5000:], index, doc_type=doc_type, _op_type='delete', thread_count=2, chunk_size=10000)
 
 # Update doc by doc _id
 df.iloc[:1000, 1] = 'Bye'
@@ -70,4 +70,8 @@ print(df.dtypes)
 # infer dtype from es template
 df = ep.to_pandas(index, infer_dtype=True)
 print(df.dtypes)
+
+# Example of write data to es with pandas.io.json
+ep.to_es(df, index, doc_type=doc_type, use_pandas_json=True, thread_count=2, chunk_size=10000)
+print('write es doc with pandas.io.json finished')
 ```

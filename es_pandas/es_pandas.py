@@ -21,17 +21,13 @@ class es_pandas(object):
         self.id_col = '_id'
         self.es7 = self.es.info()['version']['number'].startswith('7.')
 
-    def to_es(self, df, index, doc_type=None, use_index=False, thread_count=2, chunk_size=1000, request_timeout=60,
-              success_threshold=0.9, _op_type='index', use_pandas_json=False, date_format='iso'):
+    def to_es(self, df, index, doc_type=None, use_index=False,
+              success_threshold=0.9, _op_type='index', use_pandas_json=False, date_format='iso', **kwargs):
         '''
         :param df: pandas DataFrame data
         :param index: full name of es indices
         :param doc_type: full name of es template
         :param use_index: use DataFrame index as records' _id
-        :param delete: delete existing doc_type template if True
-        :param thread_count: number of thread sent data to es
-        :param chunk_size: number of docs in one chunk sent to es
-        :param request_timeout:
         :param success_threshold:
         :param _op_type: elasticsearch _op_type, default 'index', choices: 'index', 'create', 'update', 'delete'
         :param use_pandas_json: default False, if True, use pandas.io.json serialize
@@ -46,8 +42,7 @@ class es_pandas(object):
                                     (self.rec_to_actions(df, index, doc_type=doc_type,
                                                          use_index=use_index, _op_type=_op_type,
                                                          use_pandas_json=use_pandas_json, date_format=date_format)),
-                                    thread_count=thread_count,
-                                    chunk_size=chunk_size, raise_on_error=True, request_timeout=request_timeout)
+                                    **kwargs)
 
         success_num = np.sum([res[0] for res in gen])
         rec_num = len(df)
