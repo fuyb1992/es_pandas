@@ -1,6 +1,6 @@
 # es_pandas
 [![Build Status](https://travis-ci.org/fuyb1992/es_pandas.svg?branch=master)](https://travis-ci.org/fuyb1992/es_pandas) <a href="https://996.icu"><img src="https://img.shields.io/badge/link-996.icu-red.svg" alt="996.icu" /></a> [![LICENSE](https://img.shields.io/badge/license-Anti%20996-blue.svg)](https://github.com/996icu/996.ICU/blob/master/LICENSE) [![PyPi version](https://pypip.in/v/es_pandas/badge.png)](https://crate.io/packages/es_pandas/)
-[![PyPi downloads](https://pypip.in/d/es_pandas/badge.png)](https://pypistats.org/packages/es-pandas)
+[![Downloads](https://pepy.tech/badge/es-pandas/month)](https://pepy.tech/project/es-pandas/month)
 
  Read, write and update large scale [pandas](http://pandas.pydata.org/) DataFrame  with [ElasticSearch](https://www.elastic.co/).
  
