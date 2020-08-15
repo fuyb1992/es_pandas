@@ -1,4 +1,4 @@
-import time
+import warnings
 import progressbar
 
 if not progressbar.__version__.startswith('3.'):
@@ -19,7 +19,11 @@ class es_pandas(object):
         self.ic = self.es.indices
         self.dtype_mapping = {'text': 'category', 'date': 'datetime64[ns]'}
         self.id_col = '_id'
-        self.es7 = self.es.info()['version']['number'].startswith('7.')
+        self.es_version_str = self.es.info()['version']['number']
+        self.es_version = [int(x) for x in self.es_version_str.split('.')]
+        if self.es_version[0] < 6:
+            warnings.warn('Supporting of ElasticSearch 5.x will by deprecated in future version, '
+                          'current es version: %s' % self.es_version_str, category=FutureWarning)
 
     def to_es(self, df, index, doc_type=None, use_index=False,
               success_threshold=0.9, _op_type='index', use_pandas_json=False, date_format='iso', **kwargs):
@@ -34,9 +38,11 @@ class es_pandas(object):
         :param date_format: default iso, only works when use_pandas_json=True
         :return: num of the number of data written into es successfully
         '''
-        if self.es7:
+        if self.es_version[0] > 6:
+            doc_type = None
+        elif self.es_version[0] > 5:
             doc_type = '_doc'
-        if not doc_type:
+        elif not doc_type:
             doc_type = index + '_type'
         gen = helpers.parallel_bulk(self.es,
                                     (self.rec_to_actions(df, index, doc_type=doc_type,
@@ -65,8 +71,8 @@ class es_pandas(object):
                 yield {'_id': mes['_id'], **mes['_source']}
 
     def infer_dtype(self, index, heads):
-        if self.es7:
-            mapping = self.ic.get_mapping(index=index, include_type_name=False)
+        if self.es_version[0] > 6:
+            mapping = self.ic.get_mapping(index=index)
         else:
             # Fix es client unrecongnized parameter 'include_type_name' bug for es 6.x
             mapping = self.ic.get_mapping(index=index)
@@ -116,9 +122,9 @@ class es_pandas(object):
 
     @staticmethod
     def gen_action(**kwargs):
-        return kwargs
+        return {k: v for k, v in kwargs.items() if v is not None}
 
-    def rec_to_actions(self, df, index, doc_type, use_index=False, _op_type='index', use_pandas_json=False, date_format='iso'):
+    def rec_to_actions(self, df, index, doc_type=None, use_index=False, _op_type='index', use_pandas_json=False, date_format='iso'):
         bar = progressbar.ProgressBar(max_value=df.shape[0])
         columns = df.columns.tolist()
         iso_dates = date_format == 'iso'
@@ -150,10 +156,22 @@ class es_pandas(object):
         else:
             raise Exception('[%s] action with %s using index not supported' % (_op_type, '' if use_index else 'not'))
 
-    def init_es_tmpl(self, df, doc_type, delete=False, shards_count=2, wait_time=5):
+    def init_es_tmpl(self, df, doc_type, delete=False, index_patterns=None, **kwargs):
+        '''
+
+        :param df: pd.DataFrame
+        :param doc_type: str, name of doc_type
+        :param delete: bool, if True, delete existed template
+        :param index_patterns: list, default None, [doc_type*]
+        :param kwargs: kwargs for template settings,
+               example: number_of_shards, number_of_replicas, refresh_interval
+        :return:
+        '''
         tmpl_exits = self.es.indices.exists_template(name=doc_type)
         if tmpl_exits and (not delete):
             return
+        if index_patterns is None:
+            index_patterns = ['%s*' % doc_type]
         columns_body = {}
 
         if isinstance(df, pd.DataFrame):
@@ -174,29 +192,17 @@ class es_pandas(object):
                 columns_body[key] = {'type': 'keyword', 'ignore_above': '256'}
 
         tmpl = {
-            'template': '%s*' % doc_type,
-            'settings': {
-                'index': {
-                    'refresh_interval': '5s',
-                    'number_of_shards': shards_count,
-                    'number_of_replicas': '1',
-                    'merge': {
-                        'scheduler': {
-                            'max_thread_count': '1'
-                        }
-                    }
-                }
-            }
+            'index_patterns': index_patterns,
+            'settings': {**kwargs}
         }
-        if self.es7:
-            tmpl['mappings'] ={'properties': columns_body}
+        if self.es_version[0] > 6:
+            tmpl['mappings'] = {'properties': columns_body}
+        elif self.es_version[0] > 5:
+            tmpl['mappings'] = {'_doc': {'properties': columns_body}}
         else:
-            tmpl['mappings'] = {'_default_':
-                             {'properties': columns_body}
-                         }
+            tmpl['mappings'] = {'_default_': {'properties': columns_body}}
         if tmpl_exits and delete:
             self.es.indices.delete_template(name=doc_type)
             print('Delete and put template: %s' % doc_type)
         self.es.indices.put_template(name=doc_type, body=tmpl)
         print('New template %s added' % doc_type)
-        time.sleep(wait_time)

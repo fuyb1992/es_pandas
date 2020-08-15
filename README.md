@@ -13,6 +13,10 @@ The package is hosted on PyPi and can be installed with pip:
 ```
 pip install es_pandas
 ```
+#### Deprecation Notice
+
+Supporting of ElasticSearch 5.x will by deprecated in future version.
+
 ## Usage
 
 ```
