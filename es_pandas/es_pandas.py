@@ -40,6 +40,8 @@ class es_pandas(object):
         '''
         if self.es_version[0] > 6:
             doc_type = None
+        elif self.es_version[0] > 5:
+            doc_type = '_doc'
         elif not doc_type:
             doc_type = index + '_type'
         gen = helpers.parallel_bulk(self.es,
