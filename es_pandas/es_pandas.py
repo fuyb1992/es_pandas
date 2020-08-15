@@ -19,9 +19,11 @@ class es_pandas(object):
         self.ic = self.es.indices
         self.dtype_mapping = {'text': 'category', 'date': 'datetime64[ns]'}
         self.id_col = '_id'
-        self.es7 = self.es.info()['version']['number'].startswith('7.')
-        if self.es.info()['version']['number'].startswith('5.'):
-            warnings.warn('Supporting of ElasticSearch 5.x will by deprecated in future version', category=FutureWarning)
+        self.es_version_str = self.es.info()['version']['number']
+        self.es_version = [int(x) for x in self.es_version_str.split('.')]
+        if self.es_version[0] < 6:
+            warnings.warn('Supporting of ElasticSearch 5.x will by deprecated in future version, '
+                          'current es version: %s' % self.es_version_str, category=FutureWarning)
 
     def to_es(self, df, index, doc_type=None, use_index=False,
               success_threshold=0.9, _op_type='index', use_pandas_json=False, date_format='iso', **kwargs):
@@ -36,7 +38,7 @@ class es_pandas(object):
         :param date_format: default iso, only works when use_pandas_json=True
         :return: num of the number of data written into es successfully
         '''
-        if self.es7:
+        if self.es_version[0] > 6:
             doc_type = None
         elif not doc_type:
             doc_type = index + '_type'
@@ -67,7 +69,7 @@ class es_pandas(object):
                 yield {'_id': mes['_id'], **mes['_source']}
 
     def infer_dtype(self, index, heads):
-        if self.es7:
+        if self.es_version[0] > 6:
             mapping = self.ic.get_mapping(index=index)
         else:
             # Fix es client unrecongnized parameter 'include_type_name' bug for es 6.x
@@ -191,12 +193,12 @@ class es_pandas(object):
             'index_patterns': index_patterns,
             'settings': {**kwargs}
         }
-        if self.es7:
+        if self.es_version[0] > 6:
             tmpl['mappings'] = {'properties': columns_body}
+        elif self.es_version[0] > 5:
+            tmpl['mappings'] = {'_doc': {'properties': columns_body}}
         else:
-            tmpl['mappings'] = {'_default_':
-                                    {'properties': columns_body}
-                                }
+            tmpl['mappings'] = {'_default_': {'properties': columns_body}}
         if tmpl_exits and delete:
             self.es.indices.delete_template(name=doc_type)
             print('Delete and put template: %s' % doc_type)
