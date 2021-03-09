@@ -1,5 +1,3 @@
-# https://github.com/fuyb1992/es_pandas/blob/master/es_pandas/es_pandas.py
-# with show_progress option in to_es
 import warnings
 import progressbar
 
