@@ -1,3 +1,5 @@
+# https://github.com/fuyb1992/es_pandas/blob/master/es_pandas/es_pandas.py
+# with show_progress option in to_es
 import warnings
 import progressbar
 
@@ -26,7 +28,7 @@ class es_pandas(object):
                           'current es version: %s' % self.es_version_str, category=FutureWarning)
 
     def to_es(self, df, index, doc_type=None, use_index=False,
-              success_threshold=0.9, _op_type='index', use_pandas_json=False, date_format='iso', **kwargs):
+              success_threshold=0.9, _op_type='index', use_pandas_json=False, date_format='iso', show_progress=True, **kwargs):
         '''
         :param df: pandas DataFrame data
         :param index: full name of es indices
@@ -47,7 +49,8 @@ class es_pandas(object):
         gen = helpers.parallel_bulk(self.es,
                                     (self.rec_to_actions(df, index, doc_type=doc_type,
                                                          use_index=use_index, _op_type=_op_type,
-                                                         use_pandas_json=use_pandas_json, date_format=date_format)),
+                                                         use_pandas_json=use_pandas_json, date_format=date_format,
+                                                         show_progress=show_progress)),
                                     **kwargs)
 
         success_num = np.sum([res[0] for res in gen])
@@ -124,33 +127,40 @@ class es_pandas(object):
     def gen_action(**kwargs):
         return {k: v for k, v in kwargs.items() if v is not None}
 
-    def rec_to_actions(self, df, index, doc_type=None, use_index=False, _op_type='index', use_pandas_json=False, date_format='iso'):
-        bar = progressbar.ProgressBar(max_value=df.shape[0])
+    def rec_to_actions(self, df, index, doc_type=None, use_index=False, _op_type='index', use_pandas_json=False,
+                       date_format='iso', show_progress=True):
+        bar = None
+        if show_progress:
+            bar = progressbar.ProgressBar(max_value=df.shape[0])
         columns = df.columns.tolist()
         iso_dates = date_format == 'iso'
         if use_index and (_op_type in ['create', 'index']):
             for i, row in enumerate(df.itertuples(name=None, index=use_index)):
-                bar.update(i)
+                if show_progress:
+                    bar.update(i)
                 _id = row[0]
                 record = self.serialize(row[1:], columns, use_pandas_json, iso_dates)
                 action = self.gen_action(_op_type=_op_type, _index=index, _type=doc_type, _id=_id, _source=record)
                 yield action
         elif (not use_index) and (_op_type == 'index'):
             for i, row in enumerate(df.itertuples(name=None, index=use_index)):
-                bar.update(i)
+                if show_progress:
+                    bar.update(i)
                 record = self.serialize(row, columns, use_pandas_json, iso_dates)
                 action = self.gen_action(_op_type=_op_type, _index=index, _type=doc_type, _source=record)
                 yield action
         elif _op_type == 'update':
             for i, row in enumerate(df.itertuples(name=None, index=True)):
-                bar.update(i)
+                if show_progress:
+                    bar.update(i)
                 _id = row[0]
                 record = self.serialize(row[1:], columns, False, iso_dates)
                 action = self.gen_action(_op_type=_op_type, _index=index, _type=doc_type, _id=_id, doc=record)
                 yield action
         elif _op_type == 'delete':
             for i, _id in enumerate(df.index.values.tolist()):
-                bar.update(i)
+                if show_progress:
+                    bar.update(i)
                 action = self.gen_action(_op_type=_op_type, _index=index, _type=doc_type, _id=_id)
                 yield action
         else:
