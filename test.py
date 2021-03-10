@@ -28,7 +28,7 @@ ep.to_es(df, index, doc_type=doc_type, thread_count=2, chunk_size=5000)
 print('write es doc without index finished')
 
 # Example of use DataFrame index as es doc _id
-ep.to_es(df, index, doc_type=doc_type, use_index=True, thread_count=2, chunk_size=5000)
+ep.to_es(df, index, doc_type=doc_type, use_index=True, thread_count=2, chunk_size=5000, show_progress=False)
 print('write es doc with index finished')
 
 # waiting for es data writing
