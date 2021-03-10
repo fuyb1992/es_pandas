@@ -25,7 +25,7 @@ class es_pandas(object):
             warnings.warn('Supporting of ElasticSearch 5.x will by deprecated in future version, '
                           'current es version: %s' % self.es_version_str, category=FutureWarning)
 
-    def to_es(self, df, index, doc_type=None, use_index=False,
+    def to_es(self, df, index, doc_type=None, use_index=False, show_progress=True, 
               success_threshold=0.9, _op_type='index', use_pandas_json=False, date_format='iso', **kwargs):
         '''
         :param df: pandas DataFrame data
@@ -45,7 +45,7 @@ class es_pandas(object):
         elif not doc_type:
             doc_type = index + '_type'
         gen = helpers.parallel_bulk(self.es,
-                                    (self.rec_to_actions(df, index, doc_type=doc_type,
+                                    (self.rec_to_actions(df, index, doc_type=doc_type, show_progress=show_progress, 
                                                          use_index=use_index, _op_type=_op_type,
                                                          use_pandas_json=use_pandas_json, date_format=date_format)),
                                     **kwargs)
@@ -124,8 +124,11 @@ class es_pandas(object):
     def gen_action(**kwargs):
         return {k: v for k, v in kwargs.items() if v is not None}
 
-    def rec_to_actions(self, df, index, doc_type=None, use_index=False, _op_type='index', use_pandas_json=False, date_format='iso'):
-        bar = progressbar.ProgressBar(max_value=df.shape[0])
+    def rec_to_actions(self, df, index, doc_type=None, use_index=False, _op_type='index', use_pandas_json=False, date_format='iso', show_progress=True):
+        if show_progress:
+            bar = progressbar.ProgressBar(max_value=df.shape[0])
+        else:
+            bar = BarNothing()
         columns = df.columns.tolist()
         iso_dates = date_format == 'iso'
         if use_index and (_op_type in ['create', 'index']):
@@ -206,3 +209,8 @@ class es_pandas(object):
             print('Delete and put template: %s' % doc_type)
         self.es.indices.put_template(name=doc_type, body=tmpl)
         print('New template %s added' % doc_type)
+
+
+class BarNothing(object):
+    def update(self, arg):
+        pass
