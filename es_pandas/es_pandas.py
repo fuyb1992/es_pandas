@@ -1,3 +1,4 @@
+import re
 import warnings
 import progressbar
 
@@ -20,7 +21,7 @@ class es_pandas(object):
         self.dtype_mapping = {'text': 'category', 'date': 'datetime64[ns]'}
         self.id_col = '_id'
         self.es_version_str = self.es.info()['version']['number']
-        self.es_version = [int(x) for x in self.es_version_str.split('.')]
+        self.es_version = [int(x) for x in re.findall("[0-9]+", self.es_version_str)]
         if self.es_version[0] < 6:
             warnings.warn('Supporting of ElasticSearch 5.x will by deprecated in future version, '
                           'current es version: %s' % self.es_version_str, category=FutureWarning)
