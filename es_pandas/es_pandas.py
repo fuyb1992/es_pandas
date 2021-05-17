@@ -119,7 +119,7 @@ class es_pandas(object):
     def serialize(row, columns, use_pandas_json, iso_dates):
         if use_pandas_json:
             return json.dumps(dict(zip(columns, row)), iso_dates=iso_dates)
-        return dict(zip(columns, [None if pd.isna(r) else r for r in row]))
+        return dict(zip(columns, [None if np.all(pd.isna(r)) else r for r in row]))
 
     @staticmethod
     def gen_action(**kwargs):
