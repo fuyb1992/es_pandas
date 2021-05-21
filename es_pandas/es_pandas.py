@@ -85,23 +85,28 @@ class es_pandas(object):
         return dtype
 
 
-    def to_pandas(self, index, query_rule=None, heads=[], dtype={}, infer_dtype=False, show_progress=True, **kwargs):
+    def to_pandas(self, index, query_rule=None, heads=[], dtype={}, infer_dtype=False, show_progress=True, query_sql=None, **kwargs):
         """
         scroll datas from es, and convert to dataframe, the index of dataframe is from es index,
         about 2 million records/min
         Args:
-            es_host: es host ip:port
-            query_rule:
             index: full name of es indices
-            chunk_size: maximum 10000
+            query_rule: dict, default match_all, elasticsearch query DSL
             heads: certain columns get from es fields, [] for all fields
             dtype: dict like, pandas dtypes for certain columns
             infer_dtype: bool, default False, if true, get dtype from es template
             show_progress: bool, default True, if true, show progressbar on console
+            query_sql: string, default None, SQL containing query to filter
         Returns:
             DataFrame
         """
-        if query_rule is None:
+        if query_sql:
+            dsl_from_sql = self.es.sql.translate({'query': query_sql})
+            if query_rule:
+                raise Exception('Cannot use query_rule and query_sql at the same time')
+            else:
+                query_rule = {'query': dsl_from_sql['query']}
+        elif not query_rule:
             query_rule = {'query': {'match_all': {}}}
         count = self.es.count(index=index, body=query_rule)['count']
         if count < 1:
