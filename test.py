@@ -53,12 +53,12 @@ time.sleep(5)
 # get certain fields from es, set certain columns dtype
 heads = ['Num', 'Date', 'Alpha']
 dtype = {'Num': 'float', 'Alpha': object}
-df = ep.to_pandas(index, heads=heads, dtype=dtype)
+df = ep.to_pandas(index, heads=heads, dtype=dtype, size=500)
 print(df.head())
 print(df.dtypes)
 
 # infer dtypes from es template
-df = ep.to_pandas(index, infer_dtype=True)
+df = ep.to_pandas(index, infer_dtype=True, size=500)
 print(df.dtypes)
 
 # Example of write data to es with pandas.io.json
