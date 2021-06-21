@@ -75,6 +75,8 @@ print(df.dtypes)
 df = ep.to_pandas(index, infer_dtype=True)
 print(df.dtypes)
 
+# use query_sql parameter if you want to do query in sql
+
 # Example of write data to es with pandas.io.json
 ep.to_es(df, index, doc_type=doc_type, use_pandas_json=True, thread_count=2, chunk_size=10000)
 print('write es doc with pandas.io.json finished')
