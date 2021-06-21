@@ -96,12 +96,17 @@ class es_pandas(object):
             dtype: dict like, pandas dtypes for certain columns
             infer_dtype: bool, default False, if true, get dtype from es template
             show_progress: bool, default True, if true, show progressbar on console
-            query_sql: string, default None, SQL containing query to filter
+            query_sql: string or dict, default None, SQL containing query to filter
         Returns:
             DataFrame
         """
         if query_sql:
-            dsl_from_sql = self.es.sql.translate({'query': query_sql})
+            if isinstance(query_sql, str):
+                dsl_from_sql = self.es.sql.translate({'query': query_sql})
+            elif isinstance(query_sql, dict):
+                dsl_from_sql = self.es.sql.translate(query_sql)
+            else:
+                raise Exception('Parameter data type error, query_sql should be string or dict type')
             if query_rule:
                 raise Exception('Cannot use query_rule and query_sql at the same time')
             else:
