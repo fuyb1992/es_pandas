@@ -115,7 +115,7 @@ class es_pandas(object):
             query_rule = {'query': {'match_all': {}}}
         count = self.es.count(index=index, body=query_rule)['count']
         if count < 1:
-            raise Exception('Empty for %s' % index)
+            return pd.DataFrame()
         query_rule['_source'] = heads
         anl = helpers.scan(self.es, query=query_rule, index=index, **kwargs)
         df = pd.DataFrame(self.get_source(anl, show_progress=show_progress, count=count)).set_index('_id')
