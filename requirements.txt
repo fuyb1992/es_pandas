@@ -1,4 +1,4 @@
 pandas
 elasticsearch
-progressbar2
+tqdm
 requests

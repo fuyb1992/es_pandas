@@ -1,9 +1,6 @@
 import re
+import tqdm
 import warnings
-import progressbar
-
-if not progressbar.__version__.startswith('3.'):
-    raise Exception('Incorrect version of progerssbar package, please do pip install progressbar2')
 
 import numpy as np
 import pandas as pd
@@ -13,8 +10,9 @@ from elasticsearch import Elasticsearch, helpers
 
 
 class es_pandas(object):
-    '''Read, write and update large scale pandas DataFrame with Elasticsearch'''
-
+    """
+    Read, write and update large scale pandas DataFrame with Elasticsearch
+    """
     def __init__(self, *args, **kwargs):
         self.es = Elasticsearch(*args, **kwargs)
         self.ic = self.es.indices
@@ -28,7 +26,7 @@ class es_pandas(object):
 
     def to_es(self, df, index, doc_type=None, use_index=False, show_progress=True, 
               success_threshold=0.9, _op_type='index', use_pandas_json=False, date_format='iso', **kwargs):
-        '''
+        """
         :param df: pandas DataFrame data
         :param index: full name of es indices
         :param doc_type: full name of es template
@@ -38,7 +36,7 @@ class es_pandas(object):
         :param use_pandas_json: default False, if True, use pandas.io.json serialize
         :param date_format: default iso, only works when use_pandas_json=True
         :return: num of the number of data written into es successfully
-        '''
+        """
         if self.es_version[0] > 6:
             doc_type = None
         elif self.es_version[0] > 5:
@@ -60,9 +58,10 @@ class es_pandas(object):
 
         return success_num
 
-    def get_source(self, anl, show_progress=False, count=0):
+    @staticmethod
+    def get_source(anl, show_progress=False, count=0):
         if show_progress:
-            with progressbar.ProgressBar(max_value=count) as bar:
+            with tqdm.tqdm(total=count) as bar:
                 for i in range(count):
                     mes = next(anl)
                     yield {'_id': mes['_id'], **mes['_source']}
@@ -78,21 +77,22 @@ class es_pandas(object):
             # Fix es client unrecongnized parameter 'include_type_name' bug for es 6.x
             mapping = self.ic.get_mapping(index=index)
             key = [k for k in mapping[index]['mappings'].keys() if k != '_default_']
-            if len(key) < 1: raise Exception('No templates exits: %s' % index)
+            if len(key) < 1:
+                raise Exception('No templates exits: %s' % index)
             mapping[index]['mappings']['properties'] = mapping[index]['mappings'][key[0]]['properties']
         dtype = {k: v['type'] for k, v in mapping[index]['mappings']['properties'].items() if k in heads}
         dtype = {k: self.dtype_mapping[v] for k, v in dtype.items() if v in self.dtype_mapping}
         return dtype
 
-
-    def to_pandas(self, index, query_rule=None, heads=[], dtype={}, infer_dtype=False, show_progress=True, query_sql=None, **kwargs):
+    def to_pandas(self, index, query_rule=None, heads=None, dtype=None, infer_dtype=False, show_progress=True,
+                  query_sql=None, **kwargs):
         """
         scroll datas from es, and convert to dataframe, the index of dataframe is from es index,
         about 2 million records/min
         Args:
             index: full name of es indices
             query_rule: dict, default match_all, elasticsearch query DSL
-            heads: certain columns get from es fields, [] for all fields
+            heads: certain columns get from es fields, None for all fields
             dtype: dict like, pandas dtypes for certain columns
             infer_dtype: bool, default False, if true, get dtype from es template
             show_progress: bool, default True, if true, show progressbar on console
@@ -100,6 +100,10 @@ class es_pandas(object):
         Returns:
             DataFrame
         """
+        if heads is None:
+            heads = []
+        if dtype is None:
+            dtype = dict()
         if query_sql:
             if isinstance(query_sql, str):
                 dsl_from_sql = self.es.sql.translate({'query': query_sql})
@@ -135,9 +139,10 @@ class es_pandas(object):
     def gen_action(**kwargs):
         return {k: v for k, v in kwargs.items() if v is not None}
 
-    def rec_to_actions(self, df, index, doc_type=None, use_index=False, _op_type='index', use_pandas_json=False, date_format='iso', show_progress=True):
+    def rec_to_actions(self, df, index, doc_type=None, use_index=False, _op_type='index', use_pandas_json=False,
+                       date_format='iso', show_progress=True):
         if show_progress:
-            bar = progressbar.ProgressBar(max_value=df.shape[0])
+            bar = tqdm.tqdm(total=df.shape[0])
         else:
             bar = BarNothing()
         columns = df.columns.tolist()
@@ -171,7 +176,7 @@ class es_pandas(object):
             raise Exception('[%s] action with %s using index not supported' % (_op_type, '' if use_index else 'not'))
 
     def init_es_tmpl(self, df, doc_type, delete=False, index_patterns=None, **kwargs):
-        '''
+        """
 
         :param df: pd.DataFrame
         :param doc_type: str, name of doc_type
@@ -180,7 +185,7 @@ class es_pandas(object):
         :param kwargs: kwargs for template settings,
                example: number_of_shards, number_of_replicas, refresh_interval
         :return:
-        '''
+        """
         tmpl_exits = self.es.indices.exists_template(name=doc_type)
         if tmpl_exits and (not delete):
             return
@@ -204,21 +209,16 @@ class es_pandas(object):
                 columns_body[key] = {'type': 'float'}
             else:
                 columns_body[key] = {'type': 'keyword', 'ignore_above': '256'}
-
-        tmpl = {
-            'index_patterns': index_patterns,
-            'settings': {**kwargs}
-        }
         if self.es_version[0] > 6:
-            tmpl['mappings'] = {'properties': columns_body}
+            mappings = {'properties': columns_body}
         elif self.es_version[0] > 5:
-            tmpl['mappings'] = {'_doc': {'properties': columns_body}}
+            mappings = {'_doc': {'properties': columns_body}}
         else:
-            tmpl['mappings'] = {'_default_': {'properties': columns_body}}
+            mappings = {'_default_': {'properties': columns_body}}
         if tmpl_exits and delete:
             self.es.indices.delete_template(name=doc_type)
             print('Delete and put template: %s' % doc_type)
-        self.es.indices.put_template(name=doc_type, body=tmpl)
+        self.es.indices.put_template(name=doc_type, index_patterns=index_patterns, mappings=mappings, settings=kwargs)
         print('New template %s added' % doc_type)
 
 

@@ -4,6 +4,7 @@ import setuptools
 with open('README.md', 'r') as fh:
     long_description = fh.read()
 
+
 setuptools.setup(
     name='es_pandas',
     version=__versionstr__,
@@ -14,6 +15,7 @@ setuptools.setup(
     long_description_content_type='text/markdown',
     url='https://github.com/fuyb1992/es_pandas',
     packages=setuptools.find_packages(),
+    install_requires=open('requirements.txt').read().strip().split('\n'),
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
