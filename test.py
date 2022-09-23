@@ -6,7 +6,7 @@ from es_pandas import es_pandas
 
 
 # Information of es cluseter
-es_host = 'localhost:9200'
+es_host = 'http://localhost:9200'
 index = 'demo'
 
 # crete es_pandas instance
