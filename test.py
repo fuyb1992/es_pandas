@@ -1,13 +1,16 @@
 import time
+import pytz
 
 import pandas as pd
 
+from datetime import datetime
 from es_pandas import es_pandas
 
 
 # Information of es cluseter
 es_host = 'http://localhost:9200'
 index = 'demo'
+tz = pytz.timezone('Asia/Shanghai')
 
 # crete es_pandas instance
 ep = es_pandas(es_host)
@@ -15,7 +18,7 @@ ep = es_pandas(es_host)
 # Example data frame
 df = pd.DataFrame({'Num': [x for x in range(100000)]})
 df['Alpha'] = 'Hello'
-df['Date'] = pd.datetime.now()
+df['Date'] = datetime.now().astimezone(tz)
 # add null value
 df.iloc[0] = None
 
@@ -43,7 +46,7 @@ time.sleep(5)
 
 # Update doc by doc _id
 df.iloc[:1000, 1] = 'Bye'
-df.iloc[:1000, 2] = pd.datetime.now()
+df.iloc[:1000, 2] = datetime.now().astimezone(tz)
 ep.to_es(df.iloc[:1000, 1:], index, doc_type=doc_type, _op_type='update', thread_count=2, chunk_size=1000)
 print('update es doc finished')
 
