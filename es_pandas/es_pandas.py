@@ -24,7 +24,7 @@ class es_pandas(object):
             warnings.warn('Supporting of ElasticSearch 5.x will by deprecated in future version, '
                           'current es version: %s' % self.es_version_str, category=FutureWarning)
 
-    def to_es(self, df, index, doc_type=None, use_index=False, show_progress=True, 
+    def to_es(self, df, index, doc_type=None, use_index=False, show_progress=True,
               success_threshold=0.9, _op_type='index', use_pandas_json=False, date_format='iso', **kwargs):
         """
         :param df: pandas DataFrame data
@@ -44,7 +44,7 @@ class es_pandas(object):
         elif not doc_type:
             doc_type = index + '_type'
         gen = helpers.parallel_bulk(self.es,
-                                    (self.rec_to_actions(df, index, doc_type=doc_type, show_progress=show_progress, 
+                                    (self.rec_to_actions(df, index, doc_type=doc_type, show_progress=show_progress,
                                                          use_index=use_index, _op_type=_op_type,
                                                          use_pandas_json=use_pandas_json, date_format=date_format)),
                                     **kwargs)
@@ -106,7 +106,7 @@ class es_pandas(object):
             dtype = dict()
         if query_sql:
             if isinstance(query_sql, str):
-                dsl_from_sql = self.es.sql.translate({'query': query_sql})
+                dsl_from_sql = self.es.sql.translate(query=query_sql)
             elif isinstance(query_sql, dict):
                 dsl_from_sql = self.es.sql.translate(query_sql)
             else:
