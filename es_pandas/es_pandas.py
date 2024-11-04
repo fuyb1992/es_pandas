@@ -65,7 +65,7 @@ class es_pandas(object):
                 for i in range(count):
                     mes = next(anl)
                     yield {'_id': mes['_id'], **mes['_source']}
-                    bar.update(i)
+                    bar.update()
         else:
             for mes in anl:
                 yield {'_id': mes['_id'], **mes['_source']}
@@ -149,27 +149,27 @@ class es_pandas(object):
         iso_dates = date_format == 'iso'
         if use_index and (_op_type in ['create', 'index']):
             for i, row in enumerate(df.itertuples(name=None, index=use_index)):
-                bar.update(i)
+                bar.update()
                 _id = row[0]
                 record = self.serialize(row[1:], columns, use_pandas_json, iso_dates)
                 action = self.gen_action(_op_type=_op_type, _index=index, _type=doc_type, _id=_id, _source=record)
                 yield action
         elif (not use_index) and (_op_type == 'index'):
             for i, row in enumerate(df.itertuples(name=None, index=use_index)):
-                bar.update(i)
+                bar.update()
                 record = self.serialize(row, columns, use_pandas_json, iso_dates)
                 action = self.gen_action(_op_type=_op_type, _index=index, _type=doc_type, _source=record)
                 yield action
         elif _op_type == 'update':
             for i, row in enumerate(df.itertuples(name=None, index=True)):
-                bar.update(i)
+                bar.update()
                 _id = row[0]
                 record = self.serialize(row[1:], columns, False, iso_dates)
                 action = self.gen_action(_op_type=_op_type, _index=index, _type=doc_type, _id=_id, doc=record)
                 yield action
         elif _op_type == 'delete':
             for i, _id in enumerate(df.index.values.tolist()):
-                bar.update(i)
+                bar.update()
                 action = self.gen_action(_op_type=_op_type, _index=index, _type=doc_type, _id=_id)
                 yield action
         else:
